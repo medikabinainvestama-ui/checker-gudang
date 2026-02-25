@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Popup Note", layout="centered")
+st.set_page_config(page_title="QC MBI - Compact Note", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -19,11 +19,10 @@ if 'page' not in st.session_state:
     st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
-# State khusus untuk menyimpan catatan agar tidak hilang saat popup tutup
-if 'temp_notes' not in st.session_state:
-    st.session_state['temp_notes'] = {}
+if 'active_notes' not in st.session_state:
+    st.session_state['active_notes'] = set()
 
-# --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
+# --- FUNGSI DATABASE ---
 def ambil_semua_lock():
     locks = {}
     if os.path.exists("locks.txt"):
@@ -64,18 +63,6 @@ def ambil_daftar_selesai():
             return [line.strip() for line in f.readlines()]
     return []
 
-# --- FUNGSI POPUP NOTE ---
-@st.dialog("📝 Tambah Catatan")
-def popup_note(item_name, index):
-    st.write(f"Barang: **{item_name}**")
-    # Ambil catatan lama jika sudah pernah diisi
-    current_note = st.session_state['temp_notes'].get(index, "")
-    note_input = st.text_area("Tulis catatan bebas:", value=current_note, placeholder="Contoh: Barang penyok, kemasan basah, dll...")
-    
-    if st.button("Selesai & Simpan"):
-        st.session_state['temp_notes'][index] = note_input.strip()
-        st.rerun()
-
 # --- SISTEM LOGIN ---
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
@@ -89,15 +76,12 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
-    # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
             buka_kunci_so(st.session_state['selected_so'])
         st.session_state['auth'] = False
         st.rerun()
-
-    st.title("📦 Digital Checker")
 
     if os.path.exists("data_so.csv"):
         df = pd.read_csv("data_so.csv")
@@ -120,11 +104,10 @@ else:
         semua_so = [s for s in df[col_so].unique().tolist() if s not in ['nan', 'None', '']]
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
+        # --- HALAMAN 1: PENCARIAN ---
         if st.session_state['page'] == "search":
-            # Reset catatan setiap kali cari SO baru
-            st.session_state['temp_notes'] = {}
-            st.subheader("🎯 Cari Nomor SO")
-            st.write(f"Antrean: **{len(list_so_aktif)}** SO")
+            st.title("🎯 Cari Nomor SO")
+            st.session_state['active_notes'] = set() # Reset notes toggle
             so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
 
             if so_dipilih:
@@ -137,9 +120,9 @@ else:
                     st.session_state['page'] = "list_barang"
                     st.rerun()
 
+        # --- HALAMAN 2: LIST BARANG ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
-            
             if st.button("⬅️ Kembali"):
                 buka_kunci_so(so_aktif)
                 st.session_state['selected_so'] = None
@@ -148,16 +131,7 @@ else:
 
             df_filter = df[df[col_so] == so_aktif].copy()
             nama_apotek = df_filter.iloc[0][col_customer]
-            tanggal_so = df_filter.iloc[0][col_tgl]
-            df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
-            
-            st.info(f"📌 **Nomor SO:** {so_aktif}")
-            
-            c_info1, c_info2 = st.columns(2)
-            with c_info1:
-                st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-            with c_info2:
-                st.markdown(f"📅 **Tanggal:**\n{tanggal_so}")
+            st.info(f"📌 **{so_aktif}** - {nama_apotek}")
             
             st.divider()
 
@@ -171,35 +145,35 @@ else:
                 kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
+                    # BARIS INFORMASI RAPAT: Batch | Exp | Qty SO | Tombol Note
+                    c_info, c_note_toggle = st.columns([4, 1])
+                    with c_info:
+                        st.write(f"**B:** {batch_no} | **E:** {exp_date} | **Qty SO:** {qty_target}")
+                    with c_note_toggle:
+                        # Gunakan checkbox kecil bergaya tombol untuk Note
+                        is_note_active = st.checkbox("📝", key=f"tog_{index}")
                     
-                    col_in, col_st, col_btn = st.columns([3, 1, 1.5])
+                    # Kolom Input Qty & Status
+                    col_in, col_st = st.columns([3, 2])
                     with col_in:
-                        input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_{index}", value=0)
+                        input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
                     with col_st:
-                        st.write("")
                         if input_val == qty_target and input_val > 0:
-                            st.success("OK")
-                        else:
+                            st.success("✅ OK")
+                        elif input_val == 0:
+                            st.warning("Kosong")
                             valid_all = False
-                            st.write("---")
-
-                    with col_btn:
-                        st.write("")
-                        # Tombol untuk memicu Popup Note
-                        btn_label = "📝 Note"
-                        if st.session_state['temp_notes'].get(index):
-                            btn_label = "✅ Note" # Berubah warna/icon jika sudah ada isinya
-                        
-                        if st.button(btn_label, key=f"btn_n_{index}", use_container_width=True):
-                            popup_note(row[col_item], index)
+                        else:
+                            st.error("❌ Selisih")
+                            valid_all = False
+                    
+                    # Kolom Note muncul tepat di bawah jika 📝 diklik
+                    note_val = ""
+                    if is_note_active:
+                        note_val = st.text_input("Catatan barang:", key=f"n_{index}", placeholder="Isi jika ada kendala...")
                 
                 list_data_final.append({
-                    "kode": kode_brg, 
-                    "batch": batch_no, 
-                    "exp": exp_date, 
-                    "qty": input_val, 
-                    "note": st.session_state['temp_notes'].get(index, "")
+                    "kode": kode_brg, "batch": batch_no, "exp": exp_date, "qty": input_val, "note": note_val.strip()
                 })
 
             st.divider()
@@ -209,29 +183,20 @@ else:
                     detail_pesan = ""
                     for d in list_data_final:
                         if d['note'] != "":
-                            line = f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}"
-                            detail_pesan += line + "\n"
+                            detail_pesan += f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}\n"
 
-                    if detail_pesan == "":
-                        detail_pesan = "_Tidak ada catatan khusus._\n"
+                    if detail_pesan == "": detail_pesan = "_Tidak ada catatan khusus._\n"
 
-                    msg = (f"✅ **QC SELESAI**\n"
-                           f"👤 Petugas: {st.session_state['user']}\n"
-                           f"📄 No SO: {so_aktif}\n"
-                           f"📍 Apotek: {nama_apotek}\n"
-                           f"---------------------------\n"
-                           f"{detail_pesan}\n"
-                           f"---------------------------")
-                    
+                    msg = (f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_pesan}---------------------------")
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                     
                     simpan_so_selesai(so_aktif)
                     st.session_state['selected_so'] = None
                     st.session_state['page'] = "search"
-                    st.success("Laporan terkirim!")
+                    st.success("Terkirim!")
                     st.balloons()
                     st.rerun()
                 else:
-                    st.error("Gagal! Pastikan semua Qty sudah OK.")
+                    st.error("Gagal! Pastikan semua Qty OK.")
     else:
         st.warning("Data SO belum tersedia.")
