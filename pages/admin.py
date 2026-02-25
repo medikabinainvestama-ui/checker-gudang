@@ -26,6 +26,10 @@ if password == "pickingplanmbi":
 
     st.divider()
     
+    # Tambahkan ini di dalam blok 'if uploaded_file:' pada file admin.py
+if os.path.exists("locks.txt"):
+    os.remove("locks.txt")
+    
     # Opsi Reset jika benar-benar dibutuhkan (misal ganti bulan/tahun)
     st.subheader("⚠️ Zona Bahaya")
     if st.button("KOSONGKAN SEMUA RIWAYAT QC"):
