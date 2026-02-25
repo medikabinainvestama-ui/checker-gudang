@@ -2,13 +2,13 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
-from users import USER_DB # Mengambil data akun dari file sebelah
+from users import USER_DB
 
-# Masukkan Data Telegram Anda
+# --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Versi Final", layout="centered")
+st.set_page_config(page_title="QC MBI - Validasi Qty", layout="centered")
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -137,55 +137,79 @@ else:
         
         # Kalkulasi Data
         total_jenis_barang = len(df_filter[df_filter[col_item].notna()])
-        total_qty = df_filter[col_qty].sum()
+        total_qty_data = df_filter[col_qty].sum()
         tanggal_so = df_filter.iloc[0][col_tgl]
         nama_apotek = df_filter.iloc[0][col_customer]
 
-        # Tampilan Header Detail (Sudah Dirapikan)
+        # Tampilan Header
         st.info(f"📌 **Nomor SO:** {so_aktif}")
         
         info_col1, info_col2 = st.columns(2)
         with info_col1:
             st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-            st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
-        with info_col2:
             st.markdown(f"📦 **Total Jenis:** {total_jenis_barang} Item")
-            st.markdown(f"🔢 **Total Qty:** {int(total_qty)} Pcs")
+        with info_col2:
+            st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
+            st.markdown(f"🔢 **Total Qty SO:** {int(total_qty_data)} Pcs")
         
         st.divider()
 
-        status_checks = []
+        # --- LIST BARANG DENGAN INPUT QTY ---
+        valid_all = True
+        list_input_qty = []
+
         for index, row in df_filter.iterrows():
             if pd.notna(row[col_item]):
+                qty_seharusnya = int(row[col_qty])
+                
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    col_check, col_info = st.columns([1, 4])
-                    with col_check:
-                        is_ok = st.checkbox("OK", key=f"check_{index}")
-                        status_checks.append(is_ok)
-                    with col_info:
-                        st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
-                        st.write(f"**Jumlah:** {row[col_qty]} Pcs")
+                    c1, c2 = st.columns([2, 3])
+                    
+                    with c1:
+                        # Input Qty Fisik
+                        input_qty = st.number_input(f"Input Qty (SO: {qty_seharusnya})", 
+                                                    min_value=0, 
+                                                    step=1, 
+                                                    key=f"qty_{index}",
+                                                    value=0)
+                    
+                    with c2:
+                        st.write(f"**Batch:** {row[col_batch]}")
+                        st.write(f"**Exp:** {row[col_exp]}")
+                        
+                        # Validasi Real-time
+                        if input_qty == 0:
+                            st.warning("Belum diisi")
+                            valid_all = False
+                        elif input_qty == qty_seharusnya:
+                            st.success("✅ Sesuai")
+                        else:
+                            st.error(f"❌ Selisih ({input_qty - qty_seharusnya})")
+                            valid_all = False
+                
+                list_input_qty.append(input_qty)
 
+        st.divider()
+
+        # Tombol Kirim hanya aktif jika valid_all = True
         if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
-            if all(status_checks) and len(status_checks) > 0:
-                msg = (f"✅ **QC SELESAI**\n"
+            if valid_all:
+                total_qty_input = sum(list_input_qty)
+                msg = (f"✅ **QC SELESAI (VALID)**\n"
                        f"👤 Petugas: {st.session_state['user']}\n"
                        f"📄 No SO: {so_aktif}\n"
                        f"📍 Apotek: {nama_apotek}\n"
                        f"📅 Tgl SO: {tanggal_so}\n"
-                       f"📦 Total: {total_jenis_barang} Item ({int(total_qty)} Pcs)")
+                       f"📦 Total: {total_jenis_barang} Item\n"
+                       f"🔢 Qty Total: {int(total_qty_input)} Pcs")
                 
                 requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                 
                 simpan_so_selesai(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
-                st.success("Terkirim!")
+                st.success("Laporan Valid & Terkirim!")
                 st.balloons()
                 st.rerun()
             else:
-                st.error("Mohon centang semua barang dulu!")
-
-
-
-
+                st.error("Gagal Kirim! Pastikan semua item sudah diinput dengan Qty yang benar (tidak boleh ada selisih).")
