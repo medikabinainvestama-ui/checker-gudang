@@ -18,3 +18,15 @@ if password == "pickingplanmbi": # Ganti password sesuka Anda
         # Simpan permanen di server
         df.to_csv("data_so.csv", index=False)
         st.success("Data Berhasil Diperbarui! Tim QC sudah bisa melihat data ini.")
+
+# Tambahkan ini di bagian bawah admin.py setelah proses simpan data_so.csv
+import os
+if st.button("Hapus Riwayat SO Selesai"): # Tombol manual jika ingin reset
+    if os.path.exists("selesai.txt"):
+        os.remove("selesai.txt")
+        st.success("Riwayat pengerjaan telah dikosongkan!")
+
+# Atau jika ingin otomatis reset saat upload file baru:
+# (Masukkan ini di dalam blok 'if uploaded_file:')
+if os.path.exists("selesai.txt"):
+    os.remove("selesai.txt")
