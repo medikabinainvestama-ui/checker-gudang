@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Filter Header", layout="centered")
+st.set_page_config(page_title="QC MBI - Fix Error", layout="centered")
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -82,9 +82,10 @@ else:
     st.title("📦 Digital Checker")
 
     if os.path.exists("data_so.csv"):
+        # Load data
         df = pd.read_csv("data_so.csv")
         
-        # Penamaan Kolom sesuai file baru Anda
+        # Nama Kolom
         col_so = 'Nomor Pesanan'
         col_customer = 'Pelanggan'
         col_tgl = 'Tanggal'
@@ -93,16 +94,23 @@ else:
         col_exp = 'Tanggal Kedaluwarsa'
         col_qty = 'Kuantitas'
 
-        # --- LOGIKA PEMBERSIHAN HEADER BERULANG ---
-        # Membuang baris di mana kolom 'Nomor Pesanan' berisi tulisan 'Nomor Pesanan'
-        df = df[df[col_so] != col_so]
+        # --- PEMBERSIHAN DATA (FIX ERROR) ---
+        # 1. Buang baris yang benar-benar kosong
+        df = df.dropna(subset=[col_so], how='all')
         
-        # Membersihkan spasi dan mengisi baris kosong (ffill)
+        # 2. Buang baris header berulang (jika kolom SO isinya sama dengan judul kolom)
+        df = df[df[col_so].astype(str).str.contains(col_so) == False]
+        
+        # 3. Bersihkan spasi dan ffill untuk data induk
         df[col_so] = df[col_so].astype(str).str.strip()
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
 
+        # 4. Filter baris yang tidak punya data 'Barang' (baris sampah)
+        df = df[df[col_item].notna()]
+
         selesai_list = ambil_daftar_selesai()
-        semua_so = [s for s in df[col_so].unique().tolist() if s != 'nan']
+        # Ambil daftar SO unik yang valid (bukan 'nan' atau kosong)
+        semua_so = [s for s in df[col_so].unique().tolist() if s not in ['nan', '', 'None']]
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
         # --- HALAMAN 1: PENCARIAN ---
@@ -132,14 +140,21 @@ else:
                 st.session_state['page'] = "search"
                 st.rerun()
 
-            df_filter = df[df[col_so] == so_aktif]
+            df_filter = df[df[col_so] == so_aktif].copy()
             
+            if df_filter.empty:
+                st.error("Data SO tidak ditemukan atau kosong.")
+                st.session_state['page'] = "search"
+                st.rerun()
+
             # Info Header
             nama_apotek = df_filter.iloc[0][col_customer]
             tanggal_so = df_filter.iloc[0][col_tgl]
-            total_jenis = len(df_filter[df_filter[col_item].notna()])
-            # Pastikan Qty adalah angka sebelum dijumlah
+            
+            # Pastikan Qty angka
             df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
+            
+            total_jenis = len(df_filter)
             total_qty_data = df_filter[col_qty].sum()
 
             st.info(f"📌 **SO:** {so_aktif}")
@@ -157,28 +172,27 @@ else:
             list_input_qty = []
 
             for index, row in df_filter.iterrows():
-                if pd.notna(row[col_item]):
-                    qty_target = int(float(row[col_qty]))
-                    exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
-                    batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
+                qty_target = int(float(row[col_qty]))
+                exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
+                batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
 
-                    with st.expander(f"📦 {row[col_item]}", expanded=True):
-                        st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
-                        
-                        col_in, col_st = st.columns([3, 2])
-                        with col_in:
-                            input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0)
-                        with col_st:
-                            st.write("")
-                            if input_val == 0:
-                                st.warning("Kosong")
-                                valid_all = False
-                            elif input_val == qty_target:
-                                st.success("✅ OK")
-                            else:
-                                st.error("❌ Selisih")
-                                valid_all = False
-                    list_input_qty.append(input_val)
+                with st.expander(f"📦 {row[col_item]}", expanded=True):
+                    st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
+                    
+                    col_in, col_st = st.columns([3, 2])
+                    with col_in:
+                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0)
+                    with col_st:
+                        st.write("")
+                        if input_val == 0:
+                            st.warning("Kosong")
+                            valid_all = False
+                        elif input_val == qty_target:
+                            st.success("✅ OK")
+                        else:
+                            st.error("❌ Selisih")
+                            valid_all = False
+                list_input_qty.append(input_val)
 
             if st.button("✅ KIRIM LAPORAN", use_container_width=True, type="primary"):
                 if valid_all:
