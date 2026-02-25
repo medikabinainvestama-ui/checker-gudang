@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Compact Note", layout="centered")
+st.set_page_config(page_title="QC MBI - Versi Full Header", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -19,8 +19,6 @@ if 'page' not in st.session_state:
     st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
-if 'active_notes' not in st.session_state:
-    st.session_state['active_notes'] = set()
 
 # --- FUNGSI DATABASE ---
 def ambil_semua_lock():
@@ -107,7 +105,6 @@ else:
         # --- HALAMAN 1: PENCARIAN ---
         if st.session_state['page'] == "search":
             st.title("🎯 Cari Nomor SO")
-            st.session_state['active_notes'] = set() # Reset notes toggle
             so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
 
             if so_dipilih:
@@ -120,10 +117,11 @@ else:
                     st.session_state['page'] = "list_barang"
                     st.rerun()
 
-        # --- HALAMAN 2: LIST BARANG ---
+        # --- HALAMAN 2: LIST BARANG (HEADER DIKEMBALIKAN) ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
-            if st.button("⬅️ Kembali"):
+            
+            if st.button("⬅️ Kembali ke Pencarian"):
                 buka_kunci_so(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
@@ -131,7 +129,22 @@ else:
 
             df_filter = df[df[col_so] == so_aktif].copy()
             nama_apotek = df_filter.iloc[0][col_customer]
-            st.info(f"📌 **{so_aktif}** - {nama_apotek}")
+            tanggal_so = df_filter.iloc[0][col_tgl]
+            df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
+            
+            total_jenis = len(df_filter)
+            total_qty_so = int(df_filter[col_qty].sum())
+
+            # --- HEADER UTAMA (KEMBALI MUNCUL) ---
+            st.info(f"📌 **Nomor SO:** {so_aktif}")
+            
+            h_col1, h_col2 = st.columns(2)
+            with h_col1:
+                st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
+                st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
+            with h_col2:
+                st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
+                st.markdown(f"🔢 **Total Qty SO:** {total_qty_so} Pcs")
             
             st.divider()
 
@@ -145,15 +158,14 @@ else:
                 kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # BARIS INFORMASI RAPAT: Batch | Exp | Qty SO | Tombol Note
+                    # Baris Info Barang & Toggle Note
                     c_info, c_note_toggle = st.columns([4, 1])
                     with c_info:
                         st.write(f"**B:** {batch_no} | **E:** {exp_date} | **Qty SO:** {qty_target}")
                     with c_note_toggle:
-                        # Gunakan checkbox kecil bergaya tombol untuk Note
                         is_note_active = st.checkbox("📝", key=f"tog_{index}")
                     
-                    # Kolom Input Qty & Status
+                    # Input Qty & Status
                     col_in, col_st = st.columns([3, 2])
                     with col_in:
                         input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
@@ -167,10 +179,9 @@ else:
                             st.error("❌ Selisih")
                             valid_all = False
                     
-                    # Kolom Note muncul tepat di bawah jika 📝 diklik
                     note_val = ""
                     if is_note_active:
-                        note_val = st.text_input("Catatan barang:", key=f"n_{index}", placeholder="Isi jika ada kendala...")
+                        note_val = st.text_input("Catatan barang:", key=f"n_{index}")
                 
                 list_data_final.append({
                     "kode": kode_brg, "batch": batch_no, "exp": exp_date, "qty": input_val, "note": note_val.strip()
@@ -197,6 +208,6 @@ else:
                     st.balloons()
                     st.rerun()
                 else:
-                    st.error("Gagal! Pastikan semua Qty OK.")
+                    st.error("Gagal! Pastikan semua Qty fisik sesuai dengan target SO.")
     else:
-        st.warning("Data SO belum tersedia.")
+        st.warning("Data SO tidak ditemukan.")
