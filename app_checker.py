@@ -14,11 +14,15 @@ st.set_page_config(page_title="QC MBI - Locked Mode", layout="centered")
 def ambil_semua_lock():
     locks = {}
     if os.path.exists("locks.txt"):
-        with open("locks.txt", "r") as f:
-            for line in f:
-                if "|" in line:
-                    s, p = line.strip().split("|")
-                    locks[s] = p
+        try:
+            with open("locks.txt", "r") as f:
+                for line in f:
+                    if "|" in line:
+                        parts = line.strip().split("|")
+                        if len(parts) == 2:
+                            locks[parts[0]] = parts[1]
+        except Exception:
+            pass
     return locks
 
 def kunci_so(no_so, nama_petugas):
@@ -26,6 +30,7 @@ def kunci_so(no_so, nama_petugas):
     if no_so not in locks:
         with open("locks.txt", "a") as f:
             f.write(f"{no_so}|{nama_petugas}\n")
+            f.flush() # Memaksa data masuk ke file saat itu juga
 
 def buka_kunci_so(no_so):
     locks = ambil_semua_lock()
@@ -34,10 +39,14 @@ def buka_kunci_so(no_so):
         with open("locks.txt", "w") as f:
             for s, p in locks.items():
                 f.write(f"{s}|{p}\n")
+            f.flush()
+        # Memberi tahu streamlit bahwa state harus berubah
+        st.cache_data.clear() 
 
 def simpan_so_selesai(no_so):
     with open("selesai.txt", "a") as f:
         f.write(no_so.strip() + "\n")
+        f.flush()
     buka_kunci_so(no_so)
 
 def ambil_daftar_selesai():
@@ -50,6 +59,13 @@ def ambil_daftar_selesai():
 if 'auth' not in st.session_state:
     st.session_state['auth'] = False
     st.session_state['user'] = ""
+
+# Pastikan file users.py ada
+try:
+    from users import USER_DB
+except ImportError:
+    st.error("File users.py tidak ditemukan!")
+    st.stop()
 
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
@@ -111,7 +127,8 @@ else:
             # CEK APAKAH SEDANG DIKUNCI ORANG LAIN
             if so_asli in lock_list and lock_list[so_asli] != st.session_state['user']:
                 st.error(f"🚫 SO ini sedang dikerjakan oleh **{lock_list[so_asli]}**.")
-                st.info("Silakan pilih nomor SO yang lain.")
+                if st.button("Refresh Status Kunci"):
+                    st.rerun()
             else:
                 # Kunci SO untuk user ini
                 kunci_so(so_asli, st.session_state['user'])
