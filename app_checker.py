@@ -135,13 +135,11 @@ else:
         
         df_filter = df[df[col_so] == so_aktif]
         
-        # Kalkulasi Data
         total_jenis_barang = len(df_filter[df_filter[col_item].notna()])
         total_qty_data = df_filter[col_qty].sum()
         tanggal_so = df_filter.iloc[0][col_tgl]
         nama_apotek = df_filter.iloc[0][col_customer]
 
-        # Tampilan Header
         st.info(f"📌 **Nomor SO:** {so_aktif}")
         
         info_col1, info_col2 = st.columns(2)
@@ -154,7 +152,6 @@ else:
         
         st.divider()
 
-        # --- LIST BARANG DENGAN INPUT QTY ---
         valid_all = True
         list_input_qty = []
 
@@ -163,35 +160,33 @@ else:
                 qty_seharusnya = int(row[col_qty])
                 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    c1, c2 = st.columns([2, 3])
+                    # Menampilkan info Batch dan Exp Terlebih dahulu
+                    st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
                     
+                    c1, c2 = st.columns([3, 2])
                     with c1:
-                        # Input Qty Fisik
-                        input_qty = st.number_input(f"Input Qty (SO: {qty_seharusnya})", 
+                        # Input Qty diletakkan di bawah info barang
+                        input_qty = st.number_input(f"Input Qty Fisik (Data SO: {qty_seharusnya})", 
                                                     min_value=0, 
                                                     step=1, 
                                                     key=f"qty_{index}",
                                                     value=0)
-                    
                     with c2:
-                        st.write(f"**Batch:** {row[col_batch]}")
-                        st.write(f"**Exp:** {row[col_exp]}")
-                        
-                        # Validasi Real-time
+                        # Status Validasi muncul di samping input
+                        st.write("") # Spacer agar sejajar input
                         if input_qty == 0:
-                            st.warning("Belum diisi")
+                            st.warning("Kosong")
                             valid_all = False
                         elif input_qty == qty_seharusnya:
-                            st.success("✅ Sesuai")
+                            st.success("✅ OK")
                         else:
-                            st.error(f"❌ Selisih ({input_qty - qty_seharusnya})")
+                            st.error(f"❌ Selisih")
                             valid_all = False
                 
                 list_input_qty.append(input_qty)
 
         st.divider()
 
-        # Tombol Kirim hanya aktif jika valid_all = True
         if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
             if valid_all:
                 total_qty_input = sum(list_input_qty)
@@ -212,4 +207,4 @@ else:
                 st.balloons()
                 st.rerun()
             else:
-                st.error("Gagal Kirim! Pastikan semua item sudah diinput dengan Qty yang benar (tidak boleh ada selisih).")
+                st.error("Gagal Kirim! Ada item yang selisih atau belum diisi.")
