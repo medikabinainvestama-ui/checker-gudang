@@ -11,7 +11,6 @@ st.set_page_config(page_title="QC - Checker MBI", layout="centered")
 
 st.title("📦 Digital Checker")
 
-# --- FUNGSI DATABASE SO SELESAI ---
 def simpan_so_selesai(no_so):
     with open("selesai.txt", "a") as f:
         f.write(no_so + "\n")
@@ -22,14 +21,9 @@ def ambil_daftar_selesai():
             return [line.strip() for line in f.readlines()]
     return []
 
-# --- MENU RESET (Opsional untuk Admin) ---
-# Jika ingin menghapus semua daftar selesai, hapus file selesai.txt di server
-
-# 1. BACA DATA SO DARI ADMIN
 if os.path.exists("data_so.csv"):
     df = pd.read_csv("data_so.csv")
     
-    # Kolom mapping
     col_so = 'Nomor # Pesanan Penjualan'
     col_customer = 'Nama Pelanggan'
     col_tgl = 'Tanggal'
@@ -40,17 +34,18 @@ if os.path.exists("data_so.csv"):
 
     df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
 
-    # 2. FILTER SO YANG BELUM SELESAI
+    # FILTER & URUTKAN SO (Sorting)
     selesai_list = ambil_daftar_selesai()
     semua_so = df[col_so].unique().tolist()
-    # Hanya tampilkan SO yang tidak ada di dalam selesai_list
-    list_so_aktif = [so for so in semua_so if so not in selesai_list]
+    # Kita urutkan list agar rapi (A-Z / 1-9)
+    list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
     st.write(f"Sisa SO yang perlu di-QC: **{len(list_so_aktif)}**")
     
-    so_terpilih = st.selectbox("🎯 PILIH NOMOR SO:", ["-- Pilih SO --"] + list_so_aktif)
+    # Tips: Di kolom ini, tim QC bisa langsung mengetik nomor SO untuk mencari!
+    so_terpilih = st.selectbox("🎯 CARI/PILIH NOMOR SO:", ["-- Ketik Nomor SO di sini --"] + list_so_aktif)
 
-    if so_terpilih != "-- Pilih SO --":
+    if so_terpilih != "-- Ketik Nomor SO di sini --":
         df_filter = df[df[col_so] == so_terpilih]
         apotek = df_filter.iloc[0][col_customer]
         tanggal = df_filter.iloc[0][col_tgl]
@@ -80,24 +75,17 @@ if os.path.exists("data_so.csv"):
         
         if st.button("✅ KIRIM LAPORAN SELESAI", use_container_width=True, type="primary"):
             if all(status_checks) and len(status_checks) > 0:
-                # KIRIM KE TELEGRAM
                 msg = (f"✅ **LAPORAN QC SELESAI**\n\n"
                        f"📄 **No SO:** {so_terpilih}\n"
                        f"📍 **Apotek:** {apotek}\n"
-                       f"📅 **Tanggal:** {tanggal}\n"
-                       f"📦 **Total:** {len(df_filter)} Item")
+                       f"📅 **Tanggal:** {tanggal}")
                 
                 requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown")
-                
-                # SIMPAN KE DAFTAR SELESAI AGAR HILANG DARI LIST
                 simpan_so_selesai(so_terpilih)
-                
-                st.success(f"Laporan {so_terpilih} terkirim dan telah dihapus dari daftar aktif!")
+                st.success(f"Laporan {so_terpilih} selesai!")
                 st.balloons()
-                
-                # Refresh halaman otomatis agar SO hilang dari dropdown
                 st.rerun()
             else:
                 st.error("Mohon centang semua barang!")
 else:
-    st.warning("Data belum tersedia. Admin perlu upload file di menu samping.")
+    st.warning("Silakan Admin upload data terlebih dahulu.")
