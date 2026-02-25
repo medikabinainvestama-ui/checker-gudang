@@ -34,3 +34,7 @@ if password == "pickingplanmbi":
             st.success("Semua riwayat pengerjaan telah dihapus. Semua SO akan muncul kembali.")
         else:
             st.info("Riwayat sudah kosong.")
+
+# Tambahkan ini di admin.py saat upload file baru
+if os.path.exists("sedang_diproses.txt"):
+    os.remove("sedang_diproses.txt")
