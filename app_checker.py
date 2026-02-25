@@ -154,7 +154,7 @@ else:
         
         st.divider()
 
-    status_checks = []
+        status_checks = []
         for index, row in df_filter.iterrows():
             if pd.notna(row[col_item]):
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
@@ -185,6 +185,7 @@ else:
                 st.rerun()
             else:
                 st.error("Mohon centang semua barang dulu!")
+
 
 
 
