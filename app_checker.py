@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Fitur Note", layout="centered")
+st.set_page_config(page_title="QC MBI - Checker", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -74,6 +74,7 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
+    # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
@@ -87,18 +88,17 @@ else:
         df = pd.read_csv("data_so.csv")
         df.columns = df.columns.str.strip() 
         
+        # Pemetaan kolom data
         col_so = 'Nomor # Pesanan Penjualan'
         col_customer = 'Pelanggan'
         col_tgl = 'Tanggal Pesanan Penjualan'
+        col_kode = 'Kode #'
         col_item = 'Nama Barang'
         col_batch = 'No Seri/Produksi'
         col_exp = 'Tgl Kadaluarsa'
         col_qty = 'Kuantitas'
 
-        if col_so not in df.columns:
-            st.error(f"Kolom '{col_so}' tidak ditemukan!")
-            st.stop()
-
+        # Pembersihan dasar
         df[col_so] = df[col_so].astype(str).str.strip()
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
         df = df[df[col_item].notna()]
@@ -107,6 +107,7 @@ else:
         semua_so = [s for s in df[col_so].unique().tolist() if s not in ['nan', 'None', '']]
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
+        # --- HALAMAN 1: PENCARIAN ---
         if st.session_state['page'] == "search":
             st.subheader("🎯 Cari Nomor SO")
             st.write(f"Antrean: **{len(list_so_aktif)}** SO")
@@ -122,6 +123,7 @@ else:
                     st.session_state['page'] = "list_barang"
                     st.rerun()
 
+        # --- HALAMAN 2: LIST BARANG ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
             
@@ -141,6 +143,7 @@ else:
 
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
+            # Statistik untuk Petugas (Tetap ada di UI agar petugas tahu jumlah total)
             c_info1, c_info2 = st.columns(2)
             with c_info1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
@@ -158,12 +161,11 @@ else:
                 qty_target = int(float(row[col_qty]))
                 exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
                 batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
+                kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # Header barang dengan info dasar
                     st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
                     
-                    # Kolom Input Qty & Status
                     col_in, col_st = st.columns([3, 2])
                     with col_in:
                         input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0)
@@ -178,34 +180,43 @@ else:
                             st.error("❌ Selisih")
                             valid_all = False
                     
-                    # FITUR NOTE (Catatan)
                     show_note = st.checkbox(f"📝 Tambah Catatan", key=f"show_n_{index}")
                     note_val = ""
                     if show_note:
-                        note_val = st.text_area(f"Tulis catatan untuk {row[col_item]}", key=f"n_{index}", placeholder="Contoh: Barang penyok, Bonus, dll...")
+                        note_val = st.text_area(f"Tulis catatan", key=f"n_{index}", placeholder="Isi catatan jika ada...")
                 
-                list_data_final.append({"item": row[col_item], "qty": input_val, "note": note_val})
+                list_data_final.append({
+                    "kode": kode_brg, 
+                    "batch": batch_no, 
+                    "exp": exp_date, 
+                    "qty": input_val, 
+                    "note": note_val.strip()
+                })
 
             st.divider()
 
             if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                 if valid_all:
-                    # Susun Teks Pesan Telegram
+                    # Filter: Hanya barang yang ada note-nya untuk dikirim ke Telegram
                     detail_pesan = ""
                     for d in list_data_final:
-                        line = f"- {d['item']} ({int(d['qty'])} pcs)"
-                        if d['note'].strip() != "":
-                            line += f"\n  🗒 Note: {d['note']}"
-                        detail_pesan += line + "\n"
+                        if d['note'] != "":
+                            # Format sesuai permintaan: Kode | Batch | Exp (Qty)
+                            line = f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}"
+                            detail_pesan += line + "\n"
 
+                    # Jika tidak ada note, detail pesan dikosongkan/diberi keterangan
+                    if detail_pesan == "":
+                        detail_pesan = "_Tidak ada catatan khusus._\n"
+
+                    # Konstruksi pesan tanpa Total Qty
                     msg = (f"✅ **QC SELESAI**\n"
                            f"👤 Petugas: {st.session_state['user']}\n"
                            f"📄 No SO: {so_aktif}\n"
                            f"📍 Apotek: {nama_apotek}\n"
                            f"---------------------------\n"
                            f"{detail_pesan}"
-                           f"---------------------------\n"
-                           f"🔢 Total Qty: {int(sum([x['qty'] for x in list_data_final]))} Pcs")
+                           f"---------------------------")
                     
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                     
