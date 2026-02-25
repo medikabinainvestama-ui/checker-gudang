@@ -9,7 +9,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Form Note", layout="centered")
+st.set_page_config(page_title="QC MBI - Versi Aman", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -89,7 +89,7 @@ else:
         df = pd.read_csv("data_so.csv")
         df.columns = df.columns.str.strip() 
         
-        # Pemetaan kolom data
+        # Kolom sesuai file rincian pengiriman
         col_so = 'Nomor # Pesanan Penjualan'
         col_customer = 'Pelanggan'
         col_tgl = 'Tanggal Pesanan Penjualan'
@@ -144,7 +144,6 @@ else:
 
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
-            # Statistik untuk Petugas
             c_info1, c_info2 = st.columns(2)
             with c_info1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
@@ -181,18 +180,13 @@ else:
                             st.error("❌ Selisih")
                             valid_all = False
                     
-                    # FITUR NOTE BERFORMAT
                     show_note = st.checkbox(f"📝 Tambah Catatan", key=f"show_n_{index}")
                     note_formatted = ""
                     if show_note:
                         st.markdown("---")
                         st.caption(f"Form Catatan untuk {kode_brg}")
-                        # Input Manual
-                        ket_manual = st.text_input("Keterangan Manual", key=f"ket_{index}", placeholder="Contoh: Barang Penyok")
-                        # Input Tanggal
+                        ket_manual = st.text_input("Keterangan Manual", key=f"ket_{index}")
                         tgl_note = st.date_input("Pilih Tanggal", value=datetime.now(), key=f"tgl_{index}")
-                        
-                        # Menyusun Format: Kode Barang, (Ketik Manual), (dd/mm/yyyy)
                         formatted_date_str = tgl_note.strftime("%d/%m/%Y")
                         note_formatted = f"{kode_brg}, {ket_manual}, {formatted_date_str}"
                 
@@ -208,11 +202,9 @@ else:
 
             if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                 if valid_all:
-                    # Filter: Hanya barang yang ada note-nya
                     detail_pesan = ""
                     for d in list_data_final:
                         if d['note'] != "":
-                            # Format rincian di chat Telegram
                             line = f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}"
                             detail_pesan += line + "\n"
 
