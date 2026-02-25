@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Versi Full Header", layout="centered")
+st.set_page_config(page_title="QC MBI - Full Detail", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -74,6 +74,7 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
+    # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
@@ -117,7 +118,7 @@ else:
                     st.session_state['page'] = "list_barang"
                     st.rerun()
 
-        # --- HALAMAN 2: LIST BARANG (HEADER DIKEMBALIKAN) ---
+        # --- HALAMAN 2: LIST BARANG ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
             
@@ -135,7 +136,7 @@ else:
             total_jenis = len(df_filter)
             total_qty_so = int(df_filter[col_qty].sum())
 
-            # --- HEADER UTAMA (KEMBALI MUNCUL) ---
+            # Header Info
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
             h_col1, h_col2 = st.columns(2)
@@ -158,17 +159,17 @@ else:
                 kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # Baris Info Barang & Toggle Note
-                    c_info, c_note_toggle = st.columns([4, 1])
+                    # BARIS INFO LENGKAP: Batch | Exp | Qty SO | Tombol Note
+                    c_info, c_note_toggle = st.columns([4.5, 1])
                     with c_info:
-                        st.write(f"**B:** {batch_no} | **E:** {exp_date} | **Qty SO:** {qty_target}")
+                        st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
                     with c_note_toggle:
                         is_note_active = st.checkbox("📝", key=f"tog_{index}")
                     
                     # Input Qty & Status
                     col_in, col_st = st.columns([3, 2])
                     with col_in:
-                        input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
+                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
                     with col_st:
                         if input_val == qty_target and input_val > 0:
                             st.success("✅ OK")
@@ -179,9 +180,10 @@ else:
                             st.error("❌ Selisih")
                             valid_all = False
                     
+                    # Kolom Note
                     note_val = ""
                     if is_note_active:
-                        note_val = st.text_input("Catatan barang:", key=f"n_{index}")
+                        note_val = st.text_input("Catatan barang:", key=f"n_{index}", placeholder="Isi catatan jika ada...")
                 
                 list_data_final.append({
                     "kode": kode_brg, "batch": batch_no, "exp": exp_date, "qty": input_val, "note": note_val.strip()
@@ -198,7 +200,14 @@ else:
 
                     if detail_pesan == "": detail_pesan = "_Tidak ada catatan khusus._\n"
 
-                    msg = (f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_pesan}---------------------------")
+                    msg = (f"✅ **QC SELESAI**\n"
+                           f"👤 Petugas: {st.session_state['user']}\n"
+                           f"📄 No SO: {so_aktif}\n"
+                           f"📍 Apotek: {nama_apotek}\n"
+                           f"---------------------------\n"
+                           f"{detail_pesan}"
+                           f"---------------------------")
+                    
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                     
                     simpan_so_selesai(so_aktif)
@@ -208,6 +217,6 @@ else:
                     st.balloons()
                     st.rerun()
                 else:
-                    st.error("Gagal! Pastikan semua Qty fisik sesuai dengan target SO.")
+                    st.error("Gagal! Pastikan semua Qty fisik sesuai target.")
     else:
         st.warning("Data SO tidak ditemukan.")
