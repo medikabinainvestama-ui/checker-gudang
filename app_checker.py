@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Full Detail", layout="centered")
+st.set_page_config(page_title="QC MBI - Auto Save", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -19,6 +19,10 @@ if 'page' not in st.session_state:
     st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
+
+# Wadah untuk menyimpan draft inputan (Qty dan Note)
+if 'qc_drafts' not in st.session_state:
+    st.session_state['qc_drafts'] = {}
 
 # --- FUNGSI DATABASE ---
 def ambil_semua_lock():
@@ -54,6 +58,9 @@ def simpan_so_selesai(no_so):
         f.write(no_so.strip() + "\n")
         f.flush()
     buka_kunci_so(no_so)
+    # Hapus draft setelah selesai agar bersih
+    if no_so in st.session_state['qc_drafts']:
+        del st.session_state['qc_drafts'][no_so]
 
 def ambil_daftar_selesai():
     if os.path.exists("selesai.txt"):
@@ -74,7 +81,6 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
-    # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
@@ -116,6 +122,9 @@ else:
                     kunci_so(so_dipilih, st.session_state['user'])
                     st.session_state['selected_so'] = so_dipilih
                     st.session_state['page'] = "list_barang"
+                    # Inisialisasi draft untuk SO ini jika belum ada
+                    if so_dipilih not in st.session_state['qc_drafts']:
+                        st.session_state['qc_drafts'][so_dipilih] = {}
                     st.rerun()
 
         # --- HALAMAN 2: LIST BARANG ---
@@ -136,9 +145,7 @@ else:
             total_jenis = len(df_filter)
             total_qty_so = int(df_filter[col_qty].sum())
 
-            # Header Info
             st.info(f"📌 **Nomor SO:** {so_aktif}")
-            
             h_col1, h_col2 = st.columns(2)
             with h_col1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
@@ -152,24 +159,34 @@ else:
             valid_all = True
             list_data_final = []
 
+            # Ambil draft data untuk SO ini
+            draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
+
             for index, row in df_filter.iterrows():
                 qty_target = int(float(row[col_qty]))
                 exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
                 batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
                 kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
+                # Cek apakah ada nilai di draft
+                val_qty_awal = draft_so.get(f"q_{index}", 0)
+                val_note_awal = draft_so.get(f"n_{index}", "")
+                val_tog_awal = draft_so.get(f"tog_{index}", False)
+
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # BARIS INFO LENGKAP: Batch | Exp | Qty SO | Tombol Note
                     c_info, c_note_toggle = st.columns([4.5, 1])
                     with c_info:
                         st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
                     with c_note_toggle:
-                        is_note_active = st.checkbox("📝", key=f"tog_{index}")
+                        is_note_active = st.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
+                        # Simpan status toggle ke draft
+                        draft_so[f"tog_{index}"] = is_note_active
                     
-                    # Input Qty & Status
                     col_in, col_st = st.columns([3, 2])
                     with col_in:
-                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
+                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
+                        # Simpan angka Qty ke draft setiap kali berubah
+                        draft_so[f"q_{index}"] = input_val
                     with col_st:
                         if input_val == qty_target and input_val > 0:
                             st.success("✅ OK")
@@ -180,10 +197,11 @@ else:
                             st.error("❌ Selisih")
                             valid_all = False
                     
-                    # Kolom Note
                     note_val = ""
                     if is_note_active:
-                        note_val = st.text_input("Catatan barang:", key=f"n_{index}", placeholder="Isi catatan jika ada...")
+                        note_val = st.text_input("Catatan barang:", key=f"n_ui_{index}", value=val_note_awal, placeholder="Isi catatan jika ada...")
+                        # Simpan teks catatan ke draft
+                        draft_so[f"n_{index}"] = note_val.strip()
                 
                 list_data_final.append({
                     "kode": kode_brg, "batch": batch_no, "exp": exp_date, "qty": input_val, "note": note_val.strip()
@@ -200,14 +218,7 @@ else:
 
                     if detail_pesan == "": detail_pesan = "_Tidak ada catatan khusus._\n"
 
-                    msg = (f"✅ **QC SELESAI**\n"
-                           f"👤 Petugas: {st.session_state['user']}\n"
-                           f"📄 No SO: {so_aktif}\n"
-                           f"📍 Apotek: {nama_apotek}\n"
-                           f"---------------------------\n"
-                           f"{detail_pesan}"
-                           f"---------------------------")
-                    
+                    msg = (f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_pesan}---------------------------")
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                     
                     simpan_so_selesai(so_aktif)
