@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
+from datetime import datetime
 from users import USER_DB
 
 # --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Checker", layout="centered")
+st.set_page_config(page_title="QC MBI - Form Note", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -143,7 +144,7 @@ else:
 
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
-            # Statistik untuk Petugas (Tetap ada di UI agar petugas tahu jumlah total)
+            # Statistik untuk Petugas
             c_info1, c_info2 = st.columns(2)
             with c_info1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
@@ -180,36 +181,44 @@ else:
                             st.error("❌ Selisih")
                             valid_all = False
                     
+                    # FITUR NOTE BERFORMAT
                     show_note = st.checkbox(f"📝 Tambah Catatan", key=f"show_n_{index}")
-                    note_val = ""
+                    note_formatted = ""
                     if show_note:
-                        note_val = st.text_area(f"Tulis catatan", key=f"n_{index}", placeholder="Isi catatan jika ada...")
+                        st.markdown("---")
+                        st.caption(f"Form Catatan untuk {kode_brg}")
+                        # Input Manual
+                        ket_manual = st.text_input("Keterangan Manual", key=f"ket_{index}", placeholder="Contoh: Barang Penyok")
+                        # Input Tanggal
+                        tgl_note = st.date_input("Pilih Tanggal", value=datetime.now(), key=f"tgl_{index}")
+                        
+                        # Menyusun Format: Kode Barang, (Ketik Manual), (dd/mm/yyyy)
+                        formatted_date_str = tgl_note.strftime("%d/%m/%Y")
+                        note_formatted = f"{kode_brg}, {ket_manual}, {formatted_date_str}"
                 
                 list_data_final.append({
                     "kode": kode_brg, 
                     "batch": batch_no, 
                     "exp": exp_date, 
                     "qty": input_val, 
-                    "note": note_val.strip()
+                    "note": note_formatted
                 })
 
             st.divider()
 
             if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                 if valid_all:
-                    # Filter: Hanya barang yang ada note-nya untuk dikirim ke Telegram
+                    # Filter: Hanya barang yang ada note-nya
                     detail_pesan = ""
                     for d in list_data_final:
                         if d['note'] != "":
-                            # Format sesuai permintaan: Kode | Batch | Exp (Qty)
+                            # Format rincian di chat Telegram
                             line = f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}"
                             detail_pesan += line + "\n"
 
-                    # Jika tidak ada note, detail pesan dikosongkan/diberi keterangan
                     if detail_pesan == "":
                         detail_pesan = "_Tidak ada catatan khusus._\n"
 
-                    # Konstruksi pesan tanpa Total Qty
                     msg = (f"✅ **QC SELESAI**\n"
                            f"👤 Petugas: {st.session_state['user']}\n"
                            f"📄 No SO: {so_aktif}\n"
