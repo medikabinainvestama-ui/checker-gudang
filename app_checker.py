@@ -8,40 +8,37 @@ from users import USER_DB # Mengambil data akun dari file sebelah
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Team Mode", layout="centered")
+st.set_page_config(page_title="QC MBI - Locked Mode", layout="centered")
 
-# --- FUNGSI DATABASE SEDANG DIPROSES ---
-def catat_sedang_diproses(no_so, nama_petugas):
-    # Membaca data lama
-    data = ambil_semua_proses()
-    data[no_so] = nama_petugas
-    # Simpan kembali
-    with open("sedang_diproses.txt", "w") as f:
-        for s, p in data.items():
-            f.write(f"{s}|{p}\n")
-
-def ambil_semua_proses():
-    proses_dict = {}
-    if os.path.exists("sedang_diproses.txt"):
-        with open("sedang_diproses.txt", "r") as f:
+# --- FUNGSI DATABASE PENGUNCIAN ---
+def ambil_semua_lock():
+    locks = {}
+    if os.path.exists("locks.txt"):
+        with open("locks.txt", "r") as f:
             for line in f:
                 if "|" in line:
                     s, p = line.strip().split("|")
-                    proses_dict[s] = p
-    return proses_dict
+                    locks[s] = p
+    return locks
 
-def hapus_dari_proses(no_so):
-    data = ambil_semua_proses()
-    if no_so in data:
-        del data[no_so]
-        with open("sedang_diproses.txt", "w") as f:
-            for s, p in data.items():
+def kunci_so(no_so, nama_petugas):
+    locks = ambil_semua_lock()
+    if no_so not in locks:
+        with open("locks.txt", "a") as f:
+            f.write(f"{no_so}|{nama_petugas}\n")
+
+def buka_kunci_so(no_so):
+    locks = ambil_semua_lock()
+    if no_so in locks:
+        del locks[no_so]
+        with open("locks.txt", "w") as f:
+            for s, p in locks.items():
                 f.write(f"{s}|{p}\n")
 
 def simpan_so_selesai(no_so):
     with open("selesai.txt", "a") as f:
         f.write(no_so.strip() + "\n")
-    hapus_dari_proses(no_so)
+    buka_kunci_so(no_so)
 
 def ambil_daftar_selesai():
     if os.path.exists("selesai.txt"):
@@ -88,20 +85,17 @@ else:
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
 
         selesai_list = ambil_daftar_selesai()
-        sedang_diproses = ambil_semua_proses()
+        lock_list = ambil_semua_lock()
         
         semua_so = df[col_so].unique().tolist()
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
-        # MEMBUAT LABEL DROPDOWN DENGAN NAMA PETUGAS
+        # Dropdown Label
         label_opsi = []
-        mapping_opsi = {} # Untuk mengembalikan label ke No SO asli
-        
+        mapping_opsi = {}
         for so in list_so_aktif:
-            if so in sedang_diproses and sedang_diproses[so] != st.session_state['user']:
-                label = f"{so} (🟠 Sedang dicek oleh {sedang_diproses[so]})"
-            elif so in sedang_diproses and sedang_diproses[so] == st.session_state['user']:
-                label = f"{so} (🔵 Sedang Anda kerjakan)"
+            if so in lock_list and lock_list[so] != st.session_state['user']:
+                label = f"{so} (🔒 DIKUNCI oleh {lock_list[so]})"
             else:
                 label = so
             label_opsi.append(label)
@@ -109,56 +103,50 @@ else:
 
         st.write(f"Sisa antrean: **{len(list_so_aktif)}** SO")
         
-        opsi_terpilih = st.selectbox(
-            "🎯 CARI NOMOR SO:", 
-            label_opsi, 
-            index=None, 
-            placeholder="Ketik nomor SO di sini..."
-        )
+        opsi_terpilih = st.selectbox("🎯 PILIH NOMOR SO:", label_opsi, index=None, placeholder="Ketik nomor SO...")
 
         if opsi_terpilih:
             so_asli = mapping_opsi[opsi_terpilih]
             
-            # CEK APAKAH SO SEDANG DIKERJAKAN ORANG LAIN
-            if so_asli in sedang_diproses and sedang_diproses[so_asli] != st.session_state['user']:
-                st.warning(f"⚠️ Perhatian: SO ini sedang dibuka oleh **{sedang_diproses[so_asli]}**. Mohon koordinasi agar tidak terjadi double check.")
+            # CEK APAKAH SEDANG DIKUNCI ORANG LAIN
+            if so_asli in lock_list and lock_list[so_asli] != st.session_state['user']:
+                st.error(f"🚫 SO ini sedang dikerjakan oleh **{lock_list[so_asli]}**.")
+                st.info("Silakan pilih nomor SO yang lain.")
+            else:
+                # Kunci SO untuk user ini
+                kunci_so(so_asli, st.session_state['user'])
+                
+                df_filter = df[df[col_so] == so_asli]
+                apotek = df_filter.iloc[0][col_customer]
+                tanggal = df_filter.iloc[0][col_tgl]
+                
+                st.info(f"**Nomor SO:** {so_asli}  \n**Apotek:** {apotek}")
 
-            # Catat bahwa user ini sedang membuka SO tersebut
-            catat_sedang_diproses(so_asli, st.session_state['user'])
-            
-            df_filter = df[df[col_so] == so_asli]
-            apotek = df_filter.iloc[0][col_customer]
-            tanggal = df_filter.iloc[0][col_tgl]
-            
-            st.info(f"**Nomor SO:** {so_asli}  \n**Apotek:** {apotek}")
+                status_checks = []
+                for index, row in df_filter.iterrows():
+                    if pd.notna(row[col_item]):
+                        with st.expander(f"📦 {row[col_item]}", expanded=True):
+                            c1, c2 = st.columns([1, 4])
+                            with c1:
+                                is_ok = st.checkbox("OK", key=f"check_{index}")
+                                status_checks.append(is_ok)
+                            with c2:
+                                st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
+                                st.write(f"**Jumlah:** {row[col_qty]} Pcs")
 
-            status_checks = []
-            for index, row in df_filter.iterrows():
-                if pd.notna(row[col_item]):
-                    with st.expander(f"📦 {row[col_item]}", expanded=True):
-                        c1, c2 = st.columns([1, 4])
-                        with c1:
-                            is_ok = st.checkbox("OK", key=f"check_{index}")
-                            status_checks.append(is_ok)
-                        with c2:
-                            st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
-                            st.write(f"**Jumlah:** {row[col_qty]} Pcs")
-
-            st.divider()
-            
-            if st.button("✅ KIRIM LAPORAN SELESAI", use_container_width=True, type="primary"):
-                if all(status_checks) and len(status_checks) > 0:
-                    msg = (f"✅ **LAPORAN QC SELESAI**\n\n"
-                           f"👤 **Petugas:** {st.session_state['user']}\n"
-                           f"📄 **No SO:** {so_asli}\n"
-                           f"📍 **Apotek:** {apotek}")
-                    
-                    requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown")
-                    simpan_so_selesai(so_asli)
-                    st.success("Laporan terkirim!")
-                    st.balloons()
-                    st.rerun()
-                else:
-                    st.error("Mohon centang semua barang!")
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("✅ KIRIM LAPORAN", use_container_width=True, type="primary"):
+                        if all(status_checks) and len(status_checks) > 0:
+                            msg = f"✅ **QC SELESAI**\n👤 {st.session_state['user']}\n📄 {so_asli}\n📍 {apotek}"
+                            requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
+                            simpan_so_selesai(so_asli)
+                            st.rerun()
+                        else:
+                            st.error("Centang semua barang!")
+                with col_btn2:
+                    if st.button("🔓 BATAL / PINDAH SO", use_container_width=True):
+                        buka_kunci_so(so_asli)
+                        st.rerun()
     else:
-        st.warning("Data belum tersedia. Hubungi Admin.")
+        st.warning("Data belum tersedia.")
