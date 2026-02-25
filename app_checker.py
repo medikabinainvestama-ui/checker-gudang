@@ -8,7 +8,7 @@ from users import USER_DB # Mengambil data akun dari file sebelah
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Berjenjang", layout="centered")
+st.set_page_config(page_title="QC MBI - Detail Lengkap", layout="centered")
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -56,7 +56,7 @@ if 'auth' not in st.session_state:
     st.session_state['auth'] = False
     st.session_state['user'] = ""
 if 'page' not in st.session_state:
-    st.session_state['page'] = "search" # Halaman default
+    st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
 
@@ -102,7 +102,6 @@ else:
                 if so_dipilih in current_locks and current_locks[so_dipilih] != st.session_state['user']:
                     st.error(f"🚫 Sedang dibuka oleh **{current_locks[so_dipilih]}**")
                 else:
-                    # Kunci dan pindah halaman
                     kunci_so(so_dipilih, st.session_state['user'])
                     st.session_state['selected_so'] = so_dipilih
                     st.session_state['page'] = "list_barang"
@@ -114,7 +113,6 @@ else:
     elif st.session_state['page'] == "list_barang":
         so_aktif = st.session_state['selected_so']
         
-        # Tombol Kembali
         if st.button("⬅️ Kembali ke Pencarian"):
             buka_kunci_so(so_aktif)
             st.session_state['selected_so'] = None
@@ -122,10 +120,8 @@ else:
             st.rerun()
 
         st.title("📋 Detail Barang")
-        st.info(f"📍 **Nomor SO:** {so_aktif}")
-
+        
         df = pd.read_csv("data_so.csv")
-        # Sesuaikan kolom
         col_so = 'Nomor # Pesanan Penjualan'
         col_item = 'Nama Barang'
         col_batch = 'Nomor Seri/Produksi'
@@ -139,31 +135,52 @@ else:
         
         df_filter = df[df[col_so] == so_aktif]
         
-        st.write(f"Apotek: **{df_filter.iloc[0][col_customer]}**")
+        # Kalkulasi Total
+        total_jenis_barang = len(df_filter[df_filter[col_item].notna()])
+        total_qty = df_filter[col_qty].sum()
+        tanggal_so = df_filter.iloc[0][col_tgl]
+        nama_apotek = df_filter.iloc[0][col_customer]
+
+        # Tampilan Header Detail
+        st.info(f"📍 **Nomor SO:** {so_aktif}")
+        st.write(f"🏢 **Apotek:** {nama_apotek}")
+        st.write(f"📅 **Tanggal SO:** {tanggal_so}")
+        
+        # Tampilan Badge Statistik
+        c1, c2 = st.columns(2)
+        c1.metric("Total Jenis", f"{total_jenis_barang} Item")
+        c2.metric("Total Qty", f"{int(total_qty)} Pcs")
+        
         st.divider()
 
         status_checks = []
         for index, row in df_filter.iterrows():
             if pd.notna(row[col_item]):
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    c1, c2 = st.columns([1, 4])
-                    with c1:
+                    col_check, col_info = st.columns([1, 4])
+                    with col_check:
                         is_ok = st.checkbox("OK", key=f"check_{index}")
                         status_checks.append(is_ok)
-                    with c2:
+                    with col_info:
                         st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
                         st.write(f"**Jumlah:** {row[col_qty]} Pcs")
 
         if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
             if all(status_checks) and len(status_checks) > 0:
-                msg = f"✅ **QC SELESAI**\n👤 {st.session_state['user']}\n📄 {so_aktif}\n📍 {df_filter.iloc[0][col_customer]}"
+                msg = (f"✅ **QC SELESAI**\n"
+                       f"👤 Petugas: {st.session_state['user']}\n"
+                       f"📄 No SO: {so_aktif}\n"
+                       f"📍 Apotek: {nama_apotek}\n"
+                       f"📅 Tgl SO: {tanggal_so}\n"
+                       f"📦 Total: {total_jenis_barang} Item ({int(total_qty)} Pcs)")
+                
                 requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                 
                 simpan_so_selesai(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
-                st.success("Terkirim!")
+                st.success("Laporan Terkirim!")
                 st.balloons()
                 st.rerun()
             else:
-                st.error("Centang semua barang dulu!")
+                st.error("Mohon centang semua barang terlebih dahulu!")
