@@ -8,7 +8,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Validasi Qty", layout="centered")
+st.set_page_config(page_title="QC MBI - Filter Header", layout="centered")
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -72,7 +72,6 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
-    # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
@@ -80,22 +79,38 @@ else:
         st.session_state['auth'] = False
         st.rerun()
 
-    # --- HALAMAN 1: PENCARIAN SO ---
-    if st.session_state['page'] == "search":
-        st.title("🎯 Cari Nomor SO")
-        
-        if os.path.exists("data_so.csv"):
-            df = pd.read_csv("data_so.csv")
-            col_so = 'Nomor # Pesanan Penjualan'
-            df[col_so] = df[col_so].astype(str).str.strip()
-            
-            selesai_list = ambil_daftar_selesai()
-            semua_so = df[col_so].unique().tolist()
-            list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
+    st.title("📦 Digital Checker")
 
-            st.write(f"Total Antrean: **{len(list_so_aktif)}** SO")
+    if os.path.exists("data_so.csv"):
+        df = pd.read_csv("data_so.csv")
+        
+        # Penamaan Kolom sesuai file baru Anda
+        col_so = 'Nomor Pesanan'
+        col_customer = 'Pelanggan'
+        col_tgl = 'Tanggal'
+        col_item = 'Barang'
+        col_batch = 'Nomor Seri'
+        col_exp = 'Tanggal Kedaluwarsa'
+        col_qty = 'Kuantitas'
+
+        # --- LOGIKA PEMBERSIHAN HEADER BERULANG ---
+        # Membuang baris di mana kolom 'Nomor Pesanan' berisi tulisan 'Nomor Pesanan'
+        df = df[df[col_so] != col_so]
+        
+        # Membersihkan spasi dan mengisi baris kosong (ffill)
+        df[col_so] = df[col_so].astype(str).str.strip()
+        df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
+
+        selesai_list = ambil_daftar_selesai()
+        semua_so = [s for s in df[col_so].unique().tolist() if s != 'nan']
+        list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
+
+        # --- HALAMAN 1: PENCARIAN ---
+        if st.session_state['page'] == "search":
+            st.subheader("🎯 Cari Nomor SO")
+            st.write(f"Antrean: **{len(list_so_aktif)}** SO")
             
-            so_dipilih = st.selectbox("Pilih atau Ketik No SO:", list_so_aktif, index=None, placeholder="Contoh: SO-2026...")
+            so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
 
             if so_dipilih:
                 current_locks = ambil_semua_lock()
@@ -106,104 +121,74 @@ else:
                     st.session_state['selected_so'] = so_dipilih
                     st.session_state['page'] = "list_barang"
                     st.rerun()
-        else:
-            st.warning("Data SO belum tersedia.")
 
-    # --- HALAMAN 2: LIST BARANG ---
-    elif st.session_state['page'] == "list_barang":
-        so_aktif = st.session_state['selected_so']
-        
-        if st.button("⬅️ Kembali ke Pencarian"):
-            buka_kunci_so(so_aktif)
-            st.session_state['selected_so'] = None
-            st.session_state['page'] = "search"
-            st.rerun()
-
-        st.title("📋 Detail Barang")
-        
-        df = pd.read_csv("data_so.csv")
-        col_so = 'Nomor # Pesanan Penjualan'
-        col_item = 'Nama Barang'
-        col_qty = 'Kuantitas'
-        col_customer = 'Nama Pelanggan'
-        col_tgl = 'Tanggal'
-        col_batch = 'Nomor Seri/Produksi'
-        col_exp = 'Tgl Kadaluarsa'
-
-        df[col_so] = df[col_so].astype(str).str.strip()
-        df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
-        
-        df_filter = df[df[col_so] == so_aktif]
-        
-        total_jenis_barang = len(df_filter[df_filter[col_item].notna()])
-        total_qty_data = df_filter[col_qty].sum()
-        tanggal_so = df_filter.iloc[0][col_tgl]
-        nama_apotek = df_filter.iloc[0][col_customer]
-
-        st.info(f"📌 **Nomor SO:** {so_aktif}")
-        
-        info_col1, info_col2 = st.columns(2)
-        with info_col1:
-            st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-            st.markdown(f"📦 **Total Jenis:** {total_jenis_barang} Item")
-        with info_col2:
-            st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
-            st.markdown(f"🔢 **Total Qty SO:** {int(total_qty_data)} Pcs")
-        
-        st.divider()
-
-        valid_all = True
-        list_input_qty = []
-
-        for index, row in df_filter.iterrows():
-            if pd.notna(row[col_item]):
-                qty_seharusnya = int(row[col_qty])
-                
-                with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # Tampilan Baris Informasi: Batch | Exp | Qty SO
-                    st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty SO:** {qty_seharusnya}")
-                    
-                    c1, c2 = st.columns([3, 2])
-                    with c1:
-                        # Label input menjadi bersih sesuai permintaan
-                        input_qty = st.number_input(f"Input Qty Fisik", 
-                                                    min_value=0, 
-                                                    step=1, 
-                                                    key=f"qty_{index}",
-                                                    value=0)
-                    with c2:
-                        st.write("") # Spacer
-                        if input_qty == 0:
-                            st.warning("Kosong")
-                            valid_all = False
-                        elif input_qty == qty_seharusnya:
-                            st.success("✅ OK")
-                        else:
-                            st.error(f"❌ Selisih")
-                            valid_all = False
-                
-                list_input_qty.append(input_qty)
-
-        st.divider()
-
-        if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
-            if valid_all:
-                total_qty_input = sum(list_input_qty)
-                msg = (f"✅ **QC SELESAI (VALID)**\n"
-                       f"👤 Petugas: {st.session_state['user']}\n"
-                       f"📄 No SO: {so_aktif}\n"
-                       f"📍 Apotek: {nama_apotek}\n"
-                       f"📅 Tgl SO: {tanggal_so}\n"
-                       f"📦 Total: {total_jenis_barang} Item\n"
-                       f"🔢 Qty Total: {int(total_qty_input)} Pcs")
-                
-                requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
-                
-                simpan_so_selesai(so_aktif)
+        # --- HALAMAN 2: DETAIL BARANG ---
+        elif st.session_state['page'] == "list_barang":
+            so_aktif = st.session_state['selected_so']
+            
+            if st.button("⬅️ Kembali"):
+                buka_kunci_so(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
-                st.success("Laporan Valid & Terkirim!")
-                st.balloons()
                 st.rerun()
-            else:
-                st.error("Gagal Kirim! Ada item yang selisih atau belum diisi.")
+
+            df_filter = df[df[col_so] == so_aktif]
+            
+            # Info Header
+            nama_apotek = df_filter.iloc[0][col_customer]
+            tanggal_so = df_filter.iloc[0][col_tgl]
+            total_jenis = len(df_filter[df_filter[col_item].notna()])
+            # Pastikan Qty adalah angka sebelum dijumlah
+            df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
+            total_qty_data = df_filter[col_qty].sum()
+
+            st.info(f"📌 **SO:** {so_aktif}")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
+                st.markdown(f"📦 **Total:** {total_jenis} Jenis")
+            with c2:
+                st.markdown(f"📅 **Tanggal:**\n{tanggal_so}")
+                st.markdown(f"🔢 **Qty SO:** {int(total_qty_data)} Pcs")
+            
+            st.divider()
+
+            valid_all = True
+            list_input_qty = []
+
+            for index, row in df_filter.iterrows():
+                if pd.notna(row[col_item]):
+                    qty_target = int(float(row[col_qty]))
+                    exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
+                    batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
+
+                    with st.expander(f"📦 {row[col_item]}", expanded=True):
+                        st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
+                        
+                        col_in, col_st = st.columns([3, 2])
+                        with col_in:
+                            input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0)
+                        with col_st:
+                            st.write("")
+                            if input_val == 0:
+                                st.warning("Kosong")
+                                valid_all = False
+                            elif input_val == qty_target:
+                                st.success("✅ OK")
+                            else:
+                                st.error("❌ Selisih")
+                                valid_all = False
+                    list_input_qty.append(input_val)
+
+            if st.button("✅ KIRIM LAPORAN", use_container_width=True, type="primary"):
+                if valid_all:
+                    msg = (f"✅ **QC SELESAI**\nPetugas: {st.session_state['user']}\nSO: {so_aktif}\nApotek: {nama_apotek}\nTotal Qty: {int(sum(list_input_qty))}")
+                    requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
+                    simpan_so_selesai(so_aktif)
+                    st.session_state['selected_so'] = None
+                    st.session_state['page'] = "search"
+                    st.rerun()
+                else:
+                    st.error("Pastikan semua Qty sudah sesuai!")
+    else:
+        st.warning("Data belum tersedia. Silakan upload file di Admin.")
