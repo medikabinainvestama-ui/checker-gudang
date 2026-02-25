@@ -6,70 +6,83 @@ import requests
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="Checker Gudang MBI", layout="centered")
+st.set_page_config(page_title="Checker MBI - Rekap SO", layout="centered")
 
-st.title("📦 Checker Gudang Digital")
-st.write("Format Baru Terdeteksi (SO-2026)")
+st.title("📦 Digital Checker - Multi SO")
+st.caption("Gunakan file rekap Sales vs COGS untuk pengecekan massal")
 
-uploaded_file = st.file_uploader("Upload File Picking Baru", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader("Upload File Rekap SO (Excel/CSV)", type=["csv", "xlsx"])
 
 if uploaded_file:
-    # Membaca file (Format baru biasanya mulai dari baris 1 atau ada header langsung)
+    # 1. BACA DATA
     try:
-        # Jika file CSV hasil export sistem biasanya langsung terbaca
-        df = pd.read_csv(uploaded_file)
+        # Membaca file dan menghapus kolom yang benar-benar kosong (Unnamed)
+        df = pd.read_csv(uploaded_file).dropna(axis=1, how='all')
     except:
-        df = pd.read_excel(uploaded_file)
-
-    # Membersihkan data jika ada baris kosong di awal (opsional)
-    df.columns = df.columns.str.strip() # hapus spasi di nama kolom
+        df = pd.read_excel(uploaded_file).dropna(axis=1, how='all')
     
-    # Mengambil informasi header dari baris pertama (index 0)
-    if not df.empty:
-        no_so = df.iloc[0]['Nomor # Pesanan Penjualan']
-        tgl_so = df.iloc[0]['Tanggal']
-        apotek = df.iloc[0]['Nama Pelanggan']
-        
-        # Menampilkan Informasi di Aplikasi
-        st.info(f"""
-        **DATA PESANAN:**
-        * **Apotek:** {apotek}
-        * **No. SO:** {no_so}
-        * **Tanggal:** {tgl_so}
-        """)
+    # Bersihkan nama kolom dari spasi atau karakter aneh
+    df.columns = [str(c).strip() for c in df.columns]
 
-        st.subheader("📋 Daftar Barang")
+    # 2. PERBAIKI DATA (Handle kolom kosong di tengah)
+    # Mencari nama kolom yang benar walaupun ada kolom kosong di Excelnya
+    col_so = 'Nomor # Pesanan Penjualan'
+    col_customer = 'Nama Pelanggan'
+    col_item = 'Nama Barang'
+    col_qty = 'Kuantitas'
+    col_batch = 'Nomor Seri/Produksi'
+    col_exp = 'Tgl Kadaluarsa'
+    col_tgl = 'Tanggal'
+
+    # Mengisi baris kosong ke bawah (ffill) untuk No SO, Pelanggan, dan Tanggal
+    df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
+
+    # 3. MENU PILIHAN SO
+    list_so = df[col_so].dropna().unique().tolist()
+    
+    st.write("---")
+    so_terpilih = st.selectbox("🎯 SILAKAN PILIH NOMOR SO:", ["-- Pilih SO --"] + list_so)
+
+    if so_terpilih != "-- Pilih SO --":
+        # Filter data berdasarkan SO yang dipilih
+        df_filter = df[df[col_so] == so_terpilih]
+        
+        # Ambil info pelanggan
+        pelanggan = df_filter.iloc[0][col_customer]
+        tgl_so = df_filter.iloc[0][col_tgl]
+
+        st.info(f"**PELANGGAN:** {pelanggan}  \n**TANGGAL:** {tgl_so}")
+
+        st.subheader(f"📋 Daftar Item ({len(df_filter)} jenis barang)")
         
         status_checks = []
-        # Melakukan looping untuk setiap baris barang
-        for index, row in df.iterrows():
-            # Pastikan hanya menampilkan baris yang ada Nama Barang
-            if pd.notna(row['Nama Barang']):
-                with st.expander(f"📦 {row['Nama Barang']}", expanded=True):
-                    col1, col2 = st.columns([1, 4])
-                    with col1:
+        for index, row in df_filter.iterrows():
+            if pd.notna(row[col_item]):
+                # Tampilan per barang
+                with st.expander(f"📦 {row[col_item]}", expanded=True):
+                    c1, c2 = st.columns([1, 4])
+                    with c1:
                         is_ok = st.checkbox("OK", key=f"check_{index}")
                         status_checks.append(is_ok)
-                    with col2:
-                        st.write(f"**Batch:** {row['Nomor Seri/Produksi']} | **Exp:** {row['Tgl Kadaluarsa']}")
-                        st.write(f"**Jumlah:** {row['Kuantitas']} Pcs")
+                    with c2:
+                        st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
+                        st.write(f"**Qty:** {row[col_qty]} Pcs")
 
         st.divider()
         
-        # Tombol Kirim Laporan
-        if st.button("KIRIM LAPORAN KE ADMIN", use_container_width=True, type="primary"):
+        # 4. TOMBOL KIRIM LAPORAN
+        if st.button("KIRIM LAPORAN SELESAI", use_container_width=True, type="primary"):
             if all(status_checks) and len(status_checks) > 0:
-                msg = (f"✅ **LAPORAN CHECKER SELESAI**\n\n"
-                       f"📍 **Apotek:** {apotek}\n"
-                       f"📄 **No SO:** {no_so}\n"
-                       f"📅 **Tanggal:** {tgl_so}\n\n"
+                msg = (f"✅ **LAPORAN QC SELESAI (MULTI-SO)**\n\n"
+                       f"📍 **Apotek:** {pelanggan}\n"
+                       f"📄 **No SO:** {so_terpilih}\n"
+                       f"📅 **Tanggal:** {tgl_so}\n"
+                       f"📦 **Total Item:** {len(df_filter)}\n\n"
                        f"Status: **SEMUA BARANG SESUAI**")
                 
                 url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}&parse_mode=Markdown"
                 requests.get(url)
-                st.success("Laporan terkirim ke Telegram!")
+                st.success(f"Notifikasi untuk {so_terpilih} telah dikirim!")
                 st.balloons()
             else:
-                st.error("Mohon centang semua barang terlebih dahulu!")
-    else:
-        st.error("File kosong atau format tidak sesuai.")
+                st.error("Gagal! Pastikan semua item sudah dicentang.")
