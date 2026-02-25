@@ -8,7 +8,7 @@ from users import USER_DB # Mengambil data akun dari file sebelah
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Detail Lengkap", layout="centered")
+st.set_page_config(page_title="QC MBI - Versi Final", layout="centered")
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -124,32 +124,33 @@ else:
         df = pd.read_csv("data_so.csv")
         col_so = 'Nomor # Pesanan Penjualan'
         col_item = 'Nama Barang'
-        col_batch = 'Nomor Seri/Produksi'
-        col_exp = 'Tgl Kadaluarsa'
         col_qty = 'Kuantitas'
         col_customer = 'Nama Pelanggan'
         col_tgl = 'Tanggal'
+        col_batch = 'Nomor Seri/Produksi'
+        col_exp = 'Tgl Kadaluarsa'
 
         df[col_so] = df[col_so].astype(str).str.strip()
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
         
         df_filter = df[df[col_so] == so_aktif]
         
-        # Kalkulasi Total
+        # Kalkulasi Data
         total_jenis_barang = len(df_filter[df_filter[col_item].notna()])
         total_qty = df_filter[col_qty].sum()
         tanggal_so = df_filter.iloc[0][col_tgl]
         nama_apotek = df_filter.iloc[0][col_customer]
 
-        # Tampilan Header Detail
-        st.info(f"📍 **Nomor SO:** {so_aktif}")
-        st.write(f"🏢 **Apotek:** {nama_apotek}")
-        st.write(f"📅 **Tanggal SO:** {tanggal_so}")
+        # Tampilan Header Detail (Sudah Dirapikan)
+        st.info(f"📌 **Nomor SO:** {so_aktif}")
         
-        # Tampilan Badge Statistik
-        c1, c2 = st.columns(2)
-        c1.metric("Total Jenis", f"{total_jenis_barang} Item")
-        c2.metric("Total Qty", f"{int(total_qty)} Pcs")
+        info_col1, info_col2 = st.columns(2)
+        with info_col1:
+            st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
+            st.markdown(f"📦 **Total Jenis:** {total_jenis_barang} Item")
+        with info_col2:
+            st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
+            st.markdown(f"🔢 **Total Qty:** {int(total_qty)} Pcs")
         
         st.divider()
 
@@ -179,8 +180,8 @@ else:
                 simpan_so_selesai(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
-                st.success("Laporan Terkirim!")
+                st.success("Terkirim!")
                 st.balloons()
                 st.rerun()
             else:
-                st.error("Mohon centang semua barang terlebih dahulu!")
+                st.error("Mohon centang semua barang dulu!")
