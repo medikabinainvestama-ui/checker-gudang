@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
-from datetime import datetime
 from users import USER_DB
 
 # --- KONFIGURASI TELEGRAM ---
@@ -21,16 +20,7 @@ if 'page' not in st.session_state:
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
 
-# --- FUNGSI DATABASE & LOGGING ---
-def simpan_rekap_data(data_list):
-    """Menyimpan setiap baris barang ke file rekap_qc.csv"""
-    file_rekap = "rekap_qc.csv"
-    df_baru = pd.DataFrame(data_list)
-    if not os.path.exists(file_rekap):
-        df_baru.to_csv(file_rekap, index=False)
-    else:
-        df_baru.to_csv(file_rekap, mode='a', header=False, index=False)
-
+# --- FUNGSI DATABASE ---
 def ambil_semua_lock():
     locks = {}
     if os.path.exists("locks.txt"):
@@ -86,17 +76,6 @@ if not st.session_state['auth']:
 else:
     # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
-    
-    # Fitur Download Rekap untuk Admin di Sidebar
-    if os.path.exists("rekap_qc.csv"):
-        rekap_df = pd.read_csv("rekap_qc.csv")
-        st.sidebar.download_button(
-            label="📊 Download Rekap QC",
-            data=rekap_df.to_csv(index=False),
-            file_name=f"rekap_qc_{datetime.now().strftime('%d%m%Y')}.csv",
-            mime="text/csv"
-        )
-        
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
             buka_kunci_so(st.session_state['selected_so'])
@@ -157,7 +136,7 @@ else:
             total_jenis = len(df_filter)
             total_qty_so = int(df_filter[col_qty].sum())
 
-            # Header Info (DIKEMBALIKAN SESUAI KODE AWAL ANDA)
+            # Header Info
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
             h_col1, h_col2 = st.columns(2)
@@ -206,33 +185,18 @@ else:
                     if is_note_active:
                         note_val = st.text_input("Catatan barang:", key=f"n_{index}", placeholder="Isi catatan jika ada...")
                 
-                # Data lengkap untuk rekap CSV (Log)
                 list_data_final.append({
-                    "Waktu_Input": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "Petugas": st.session_state['user'],
-                    "Nomor_SO": so_aktif,
-                    "Apotek": nama_apotek,
-                    "Kode": kode_brg,
-                    "Nama_Barang": row[col_item],
-                    "Batch": batch_no,
-                    "Exp": exp_date,
-                    "Qty_SO": qty_target,
-                    "Qty_Fisik": input_val,
-                    "Catatan": note_val.strip()
+                    "kode": kode_brg, "batch": batch_no, "exp": exp_date, "qty": input_val, "note": note_val.strip()
                 })
 
             st.divider()
 
             if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                 if valid_all:
-                    # 1. Simpan Rekap Data CSV
-                    simpan_rekap_data(list_data_final)
-                    
-                    # 2. Susun Pesan Telegram (Hanya yang ada Note-nya)
                     detail_pesan = ""
                     for d in list_data_final:
-                        if d['Catatan'] != "":
-                            detail_pesan += f"- {d['Kode']} | {d['Batch']} | {d['Exp']} ({int(d['Qty_Fisik'])} pcs)\n  🗒 Note: {d['Catatan']}\n"
+                        if d['note'] != "":
+                            detail_pesan += f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}\n"
 
                     if detail_pesan == "": detail_pesan = "_Tidak ada catatan khusus._\n"
 
@@ -249,7 +213,7 @@ else:
                     simpan_so_selesai(so_aktif)
                     st.session_state['selected_so'] = None
                     st.session_state['page'] = "search"
-                    st.success("Terkirim & Tersimpan!")
+                    st.success("Terkirim!")
                     st.balloons()
                     st.rerun()
                 else:
