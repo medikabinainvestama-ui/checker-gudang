@@ -154,6 +154,7 @@ else:
         
         st.divider()
 
+    status_checks = []
         for index, row in df_filter.iterrows():
             if pd.notna(row[col_item]):
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
@@ -164,7 +165,6 @@ else:
                     with col_info:
                         st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
                         st.write(f"**Jumlah:** {row[col_qty]} Pcs")
-        status_checks = []
 
         if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
             if all(status_checks) and len(status_checks) > 0:
@@ -185,5 +185,6 @@ else:
                 st.rerun()
             else:
                 st.error("Mohon centang semua barang dulu!")
+
 
 
