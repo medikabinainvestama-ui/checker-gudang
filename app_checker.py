@@ -8,7 +8,7 @@ from users import USER_DB # Mengambil data akun dari file sebelah
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Locked Mode", layout="centered")
+st.set_page_config(page_title="QC MBI - Auto Lock", layout="centered")
 
 # --- FUNGSI DATABASE PENGUNCIAN ---
 def ambil_semua_lock():
@@ -18,10 +18,9 @@ def ambil_semua_lock():
             with open("locks.txt", "r") as f:
                 for line in f:
                     if "|" in line:
-                        parts = line.strip().split("|")
-                        if len(parts) == 2:
-                            locks[parts[0]] = parts[1]
-        except Exception:
+                        s, p = line.strip().split("|")
+                        locks[s] = p
+        except:
             pass
     return locks
 
@@ -30,7 +29,7 @@ def kunci_so(no_so, nama_petugas):
     if no_so not in locks:
         with open("locks.txt", "a") as f:
             f.write(f"{no_so}|{nama_petugas}\n")
-            f.flush() # Memaksa data masuk ke file saat itu juga
+            f.flush()
 
 def buka_kunci_so(no_so):
     locks = ambil_semua_lock()
@@ -40,8 +39,6 @@ def buka_kunci_so(no_so):
             for s, p in locks.items():
                 f.write(f"{s}|{p}\n")
             f.flush()
-        # Memberi tahu streamlit bahwa state harus berubah
-        st.cache_data.clear() 
 
 def simpan_so_selesai(no_so):
     with open("selesai.txt", "a") as f:
@@ -59,13 +56,8 @@ def ambil_daftar_selesai():
 if 'auth' not in st.session_state:
     st.session_state['auth'] = False
     st.session_state['user'] = ""
-
-# Pastikan file users.py ada
-try:
-    from users import USER_DB
-except ImportError:
-    st.error("File users.py tidak ditemukan!")
-    st.stop()
+if 'last_so' not in st.session_state:
+    st.session_state['last_so'] = None
 
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
@@ -81,7 +73,10 @@ if not st.session_state['auth']:
             st.error("Username atau Password salah!")
 else:
     st.sidebar.title(f"👤 {st.session_state['user']}")
-    if st.sidebar.button("Keluar (Log Out)"):
+    if st.sidebar.button("Log Out"):
+        # Jika logout, pastikan kunci dilepas
+        if st.session_state['last_so']:
+            buka_kunci_so(st.session_state['last_so'])
         st.session_state['auth'] = False
         st.rerun()
 
@@ -101,43 +96,44 @@ else:
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
 
         selesai_list = ambil_daftar_selesai()
-        lock_list = ambil_semua_lock()
         
         semua_so = df[col_so].unique().tolist()
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
-        # Dropdown Label
-        label_opsi = []
-        mapping_opsi = {}
-        for so in list_so_aktif:
-            if so in lock_list and lock_list[so] != st.session_state['user']:
-                label = f"{so} (🔒 DIKUNCI oleh {lock_list[so]})"
-            else:
-                label = so
-            label_opsi.append(label)
-            mapping_opsi[label] = so
+        # Dropdown
+        so_terpilih = st.selectbox(
+            "🎯 CARI NOMOR SO:", 
+            list_so_aktif, 
+            index=None, 
+            placeholder="Ketik nomor SO di sini..."
+        )
 
-        st.write(f"Sisa antrean: **{len(list_so_aktif)}** SO")
-        
-        opsi_terpilih = st.selectbox("🎯 PILIH NOMOR SO:", label_opsi, index=None, placeholder="Ketik nomor SO...")
+        # --- LOGIKA AUTO UNLOCK (PENTING) ---
+        # Jika user pindah SO atau kembali ke None, buka kunci SO sebelumnya
+        if st.session_state['last_so'] and st.session_state['last_so'] != so_terpilih:
+            buka_kunci_so(st.session_state['last_so'])
+            st.session_state['last_so'] = None
+            st.rerun()
 
-        if opsi_terpilih:
-            so_asli = mapping_opsi[opsi_terpilih]
+        if so_terpilih:
+            # Cek status kunci terbaru
+            current_locks = ambil_semua_lock()
             
-            # CEK APAKAH SEDANG DIKUNCI ORANG LAIN
-            if so_asli in lock_list and lock_list[so_asli] != st.session_state['user']:
-                st.error(f"🚫 SO ini sedang dikerjakan oleh **{lock_list[so_asli]}**.")
-                if st.button("Refresh Status Kunci"):
+            if so_terpilih in current_locks and current_locks[so_terpilih] != st.session_state['user']:
+                st.error(f"🚫 SO ini sedang dibuka oleh **{current_locks[so_terpilih]}**")
+                st.info("Silakan pilih SO lain atau tunggu rekan Anda kembali ke menu utama.")
+                if st.button("Cek Apakah Sudah Dilepas?"):
                     st.rerun()
             else:
-                # Kunci SO untuk user ini
-                kunci_so(so_asli, st.session_state['user'])
+                # Kunci untuk diri sendiri
+                kunci_so(so_terpilih, st.session_state['user'])
+                st.session_state['last_so'] = so_terpilih
                 
-                df_filter = df[df[col_so] == so_asli]
+                df_filter = df[df[col_so] == so_terpilih]
                 apotek = df_filter.iloc[0][col_customer]
                 tanggal = df_filter.iloc[0][col_tgl]
                 
-                st.info(f"**Nomor SO:** {so_asli}  \n**Apotek:** {apotek}")
+                st.info(f"**Apotek:** {apotek} | **No SO:** {so_terpilih}")
 
                 status_checks = []
                 for index, row in df_filter.iterrows():
@@ -149,21 +145,18 @@ else:
                                 status_checks.append(is_ok)
                             with c2:
                                 st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
-                                st.write(f"**Jumlah:** {row[col_qty]} Pcs")
+                                st.write(f"**Qty:** {row[col_qty]} Pcs")
 
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button("✅ KIRIM LAPORAN", use_container_width=True, type="primary"):
-                        if all(status_checks) and len(status_checks) > 0:
-                            msg = f"✅ **QC SELESAI**\n👤 {st.session_state['user']}\n📄 {so_asli}\n📍 {apotek}"
-                            requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
-                            simpan_so_selesai(so_asli)
-                            st.rerun()
-                        else:
-                            st.error("Centang semua barang!")
-                with col_btn2:
-                    if st.button("🔓 BATAL / PINDAH SO", use_container_width=True):
-                        buka_kunci_so(so_asli)
+                if st.button("✅ KIRIM LAPORAN SELESAI", use_container_width=True, type="primary"):
+                    if all(status_checks) and len(status_checks) > 0:
+                        msg = f"✅ **QC SELESAI**\n👤 {st.session_state['user']}\n📄 {so_terpilih}\n📍 {apotek}"
+                        requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
+                        simpan_so_selesai(so_terpilih)
+                        st.session_state['last_so'] = None # Reset state setelah selesai
+                        st.success("Laporan terkirim!")
+                        st.balloons()
                         st.rerun()
+                    else:
+                        st.error("Mohon centang semua barang!")
     else:
-        st.warning("Data belum tersedia.")
+        st.warning("Data belum tersedia. Hubungi Admin.")
