@@ -147,9 +147,9 @@ else:
         info_col1, info_col2 = st.columns(2)
         with info_col1:
             st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-            st.markdown(f"📦 **Total Jenis:** {total_jenis_barang} Item")
-        with info_col2:
             st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
+        with info_col2:
+            st.markdown(f"📦 **Total Jenis:** {total_jenis_barang} Item")
             st.markdown(f"🔢 **Total Qty:** {int(total_qty)} Pcs")
         
         st.divider()
@@ -185,3 +185,4 @@ else:
                 st.rerun()
             else:
                 st.error("Mohon centang semua barang dulu!")
+
