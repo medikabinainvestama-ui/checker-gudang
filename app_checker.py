@@ -2,14 +2,13 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
-from datetime import datetime
 from users import USER_DB
 
 # --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Versi Aman", layout="centered")
+st.set_page_config(page_title="QC MBI - Popup Note", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -20,6 +19,9 @@ if 'page' not in st.session_state:
     st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
+# State khusus untuk menyimpan catatan agar tidak hilang saat popup tutup
+if 'temp_notes' not in st.session_state:
+    st.session_state['temp_notes'] = {}
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -62,6 +64,18 @@ def ambil_daftar_selesai():
             return [line.strip() for line in f.readlines()]
     return []
 
+# --- FUNGSI POPUP NOTE ---
+@st.dialog("📝 Tambah Catatan")
+def popup_note(item_name, index):
+    st.write(f"Barang: **{item_name}**")
+    # Ambil catatan lama jika sudah pernah diisi
+    current_note = st.session_state['temp_notes'].get(index, "")
+    note_input = st.text_area("Tulis catatan bebas:", value=current_note, placeholder="Contoh: Barang penyok, kemasan basah, dll...")
+    
+    if st.button("Selesai & Simpan"):
+        st.session_state['temp_notes'][index] = note_input.strip()
+        st.rerun()
+
 # --- SISTEM LOGIN ---
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
@@ -89,7 +103,6 @@ else:
         df = pd.read_csv("data_so.csv")
         df.columns = df.columns.str.strip() 
         
-        # Kolom sesuai file rincian pengiriman
         col_so = 'Nomor # Pesanan Penjualan'
         col_customer = 'Pelanggan'
         col_tgl = 'Tanggal Pesanan Penjualan'
@@ -99,7 +112,6 @@ else:
         col_exp = 'Tgl Kadaluarsa'
         col_qty = 'Kuantitas'
 
-        # Pembersihan dasar
         df[col_so] = df[col_so].astype(str).str.strip()
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
         df = df[df[col_item].notna()]
@@ -108,8 +120,9 @@ else:
         semua_so = [s for s in df[col_so].unique().tolist() if s not in ['nan', 'None', '']]
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
-        # --- HALAMAN 1: PENCARIAN ---
         if st.session_state['page'] == "search":
+            # Reset catatan setiap kali cari SO baru
+            st.session_state['temp_notes'] = {}
             st.subheader("🎯 Cari Nomor SO")
             st.write(f"Antrean: **{len(list_so_aktif)}** SO")
             so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
@@ -124,11 +137,10 @@ else:
                     st.session_state['page'] = "list_barang"
                     st.rerun()
 
-        # --- HALAMAN 2: LIST BARANG ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
             
-            if st.button("⬅️ Kembali ke Pencarian"):
+            if st.button("⬅️ Kembali"):
                 buka_kunci_so(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
@@ -139,18 +151,13 @@ else:
             tanggal_so = df_filter.iloc[0][col_tgl]
             df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
             
-            total_jenis = len(df_filter)
-            total_qty_data = df_filter[col_qty].sum()
-
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
             c_info1, c_info2 = st.columns(2)
             with c_info1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-                st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
             with c_info2:
-                st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
-                st.markdown(f"🔢 **Total Qty SO:** {int(total_qty_data)} Pcs")
+                st.markdown(f"📅 **Tanggal:**\n{tanggal_so}")
             
             st.divider()
 
@@ -166,36 +173,33 @@ else:
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
                     st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
                     
-                    col_in, col_st = st.columns([3, 2])
+                    col_in, col_st, col_btn = st.columns([3, 1, 1.5])
                     with col_in:
-                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0)
+                        input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_{index}", value=0)
                     with col_st:
                         st.write("")
-                        if input_val == 0:
-                            st.warning("Kosong")
-                            valid_all = False
-                        elif input_val == qty_target:
-                            st.success("✅ OK")
+                        if input_val == qty_target and input_val > 0:
+                            st.success("OK")
                         else:
-                            st.error("❌ Selisih")
                             valid_all = False
-                    
-                    show_note = st.checkbox(f"📝 Tambah Catatan", key=f"show_n_{index}")
-                    note_formatted = ""
-                    if show_note:
-                        st.markdown("---")
-                        st.caption(f"Form Catatan untuk {kode_brg}")
-                        ket_manual = st.text_input("Keterangan Manual", key=f"ket_{index}")
-                        tgl_note = st.date_input("Pilih Tanggal", value=datetime.now(), key=f"tgl_{index}")
-                        formatted_date_str = tgl_note.strftime("%d/%m/%Y")
-                        note_formatted = f"{kode_brg}, {ket_manual}, {formatted_date_str}"
+                            st.write("---")
+
+                    with col_btn:
+                        st.write("")
+                        # Tombol untuk memicu Popup Note
+                        btn_label = "📝 Note"
+                        if st.session_state['temp_notes'].get(index):
+                            btn_label = "✅ Note" # Berubah warna/icon jika sudah ada isinya
+                        
+                        if st.button(btn_label, key=f"btn_n_{index}", use_container_width=True):
+                            popup_note(row[col_item], index)
                 
                 list_data_final.append({
                     "kode": kode_brg, 
                     "batch": batch_no, 
                     "exp": exp_date, 
                     "qty": input_val, 
-                    "note": note_formatted
+                    "note": st.session_state['temp_notes'].get(index, "")
                 })
 
             st.divider()
@@ -216,7 +220,7 @@ else:
                            f"📄 No SO: {so_aktif}\n"
                            f"📍 Apotek: {nama_apotek}\n"
                            f"---------------------------\n"
-                           f"{detail_pesan}"
+                           f"{detail_pesan}\n"
                            f"---------------------------")
                     
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
@@ -228,6 +232,6 @@ else:
                     st.balloons()
                     st.rerun()
                 else:
-                    st.error("Gagal! Pastikan semua Qty sudah sesuai.")
+                    st.error("Gagal! Pastikan semua Qty sudah OK.")
     else:
         st.warning("Data SO belum tersedia.")
