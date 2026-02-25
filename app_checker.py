@@ -8,7 +8,17 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Versi Clean", layout="centered")
+st.set_page_config(page_title="QC MBI - Versi Final", layout="centered")
+
+# --- INISIALISASI SESSION STATE (PENAHAN LOGOUT) ---
+if 'auth' not in st.session_state:
+    st.session_state['auth'] = False
+if 'user' not in st.session_state:
+    st.session_state['user'] = ""
+if 'page' not in st.session_state:
+    st.session_state['page'] = "search"
+if 'selected_so' not in st.session_state:
+    st.session_state['selected_so'] = None
 
 # --- FUNGSI DATABASE PENGUNCIAN & SELESAI ---
 def ambil_semua_lock():
@@ -51,15 +61,7 @@ def ambil_daftar_selesai():
             return [line.strip() for line in f.readlines()]
     return []
 
-# --- SISTEM LOGIN & NAVIGASI ---
-if 'auth' not in st.session_state:
-    st.session_state['auth'] = False
-    st.session_state['user'] = ""
-if 'page' not in st.session_state:
-    st.session_state['page'] = "search"
-if 'selected_so' not in st.session_state:
-    st.session_state['selected_so'] = None
-
+# --- SISTEM LOGIN ---
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
     u_input = st.text_input("Username").lower().strip()
@@ -83,9 +85,9 @@ else:
     st.title("📦 Digital Checker")
 
     if os.path.exists("data_so.csv"):
-        # Load data
+        # Load data & bersihkan nama kolom
         df = pd.read_csv("data_so.csv")
-        df.columns = df.columns.str.strip() # Bersihkan spasi nama kolom
+        df.columns = df.columns.str.strip() 
         
         # Pemetaan nama kolom sesuai file bersih Anda
         col_so = 'Nomor # Pesanan Penjualan'
@@ -96,15 +98,15 @@ else:
         col_exp = 'Tgl Kadaluarsa'
         col_qty = 'Kuantitas'
 
-        # Proteksi jika kolom tidak ditemukan
+        # Proteksi kolom utama
         if col_so not in df.columns:
-            st.error(f"Kolom '{col_so}' tidak ditemukan. Cek file Anda.")
+            st.error(f"Kolom '{col_so}' tidak ditemukan di file CSV!")
             st.stop()
 
-        # Pembersihan dasar (ffill tetap ada untuk berjaga-jaga)
+        # Pembersihan data & pengisian baris kosong (ffill)
         df[col_so] = df[col_so].astype(str).str.strip()
         df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
-        df = df[df[col_item].notna()] # Hanya baris yang ada barangnya
+        df = df[df[col_item].notna()]
 
         selesai_list = ambil_daftar_selesai()
         semua_so = [s for s in df[col_so].unique().tolist() if s not in ['nan', 'None', '']]
@@ -113,7 +115,7 @@ else:
         # --- HALAMAN 1: PENCARIAN ---
         if st.session_state['page'] == "search":
             st.subheader("🎯 Cari Nomor SO")
-            st.write(f"Antrean saat ini: **{len(list_so_aktif)}** SO")
+            st.write(f"Antrean: **{len(list_so_aktif)}** SO")
             
             so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
 
@@ -149,7 +151,7 @@ else:
 
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             
-            # Tampilan Statistik Rapi
+            # Tampilan Statistik (Markdown)
             c_info1, c_info2 = st.columns(2)
             with c_info1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
@@ -169,7 +171,6 @@ else:
                 batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # Info Baris: Batch | Exp | Qty SO
                     st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
                     
                     col_in, col_st = st.columns([3, 2])
@@ -202,10 +203,10 @@ else:
                     simpan_so_selesai(so_aktif)
                     st.session_state['selected_so'] = None
                     st.session_state['page'] = "search"
-                    st.success("Terkirim ke Telegram!")
+                    st.success("Terkirim!")
                     st.balloons()
                     st.rerun()
                 else:
-                    st.error("Gagal! Masih ada Qty fisik yang selisih atau belum diisi.")
+                    st.error("Belum sesuai! Pastikan semua item sudah OK (tidak ada selisih).")
     else:
-        st.warning("Data SO belum tersedia. Hubungi Admin.")
+        st.warning("Data SO belum tersedia. Silakan hubungi Admin.")
