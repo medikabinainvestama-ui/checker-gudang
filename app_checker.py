@@ -160,20 +160,19 @@ else:
                 qty_seharusnya = int(row[col_qty])
                 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # Menampilkan info Batch dan Exp Terlebih dahulu
-                    st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]}")
+                    # Tampilan Baris Informasi: Batch | Exp | Qty SO
+                    st.write(f"**Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty SO:** {qty_seharusnya}")
                     
                     c1, c2 = st.columns([3, 2])
                     with c1:
-                        # Input Qty diletakkan di bawah info barang
-                        input_qty = st.number_input(f"Input Qty Fisik (Data SO: {qty_seharusnya})", 
+                        # Label input menjadi bersih sesuai permintaan
+                        input_qty = st.number_input(f"Input Qty Fisik", 
                                                     min_value=0, 
                                                     step=1, 
                                                     key=f"qty_{index}",
                                                     value=0)
                     with c2:
-                        # Status Validasi muncul di samping input
-                        st.write("") # Spacer agar sejajar input
+                        st.write("") # Spacer
                         if input_qty == 0:
                             st.warning("Kosong")
                             valid_all = False
