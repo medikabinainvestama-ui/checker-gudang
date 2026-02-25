@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import requests
 import os
+from datetime import datetime
 from users import USER_DB
 
 # --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Full Detail", layout="centered")
+st.set_page_config(page_title="QC MBI - Data Logger", layout="centered")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -20,7 +21,17 @@ if 'page' not in st.session_state:
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
 
-# --- FUNGSI DATABASE ---
+# --- FUNGSI DATABASE & LOGGING DATA ---
+def simpan_rekap_data(data_list):
+    """Menyimpan hasil QC ke file rekap_qc.csv secara permanen"""
+    file_rekap = "rekap_qc.csv"
+    df_baru = pd.DataFrame(data_list)
+    
+    if not os.path.exists(file_rekap):
+        df_baru.to_csv(file_rekap, index=False)
+    else:
+        df_baru.to_csv(file_rekap, mode='a', header=False, index=False)
+
 def ambil_semua_lock():
     locks = {}
     if os.path.exists("locks.txt"):
@@ -76,6 +87,17 @@ if not st.session_state['auth']:
 else:
     # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
+    
+    # Fitur Khusus: Download Data Rekap (Hanya muncul jika file ada)
+    if os.path.exists("rekap_qc.csv"):
+        rekap_df = pd.read_csv("rekap_qc.csv")
+        st.sidebar.download_button(
+            label="📊 Download Data Rekap QC",
+            data=rekap_df.to_csv(index=False),
+            file_name=f"rekap_qc_{datetime.now().strftime('%d%m%Y')}.csv",
+            mime="text/csv"
+        )
+        
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
             buka_kunci_so(st.session_state['selected_so'])
@@ -121,8 +143,7 @@ else:
         # --- HALAMAN 2: LIST BARANG ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
-            
-            if st.button("⬅️ Kembali ke Pencarian"):
+            if st.button("⬅️ Kembali"):
                 buka_kunci_so(so_aktif)
                 st.session_state['selected_so'] = None
                 st.session_state['page'] = "search"
@@ -132,20 +153,13 @@ else:
             nama_apotek = df_filter.iloc[0][col_customer]
             tanggal_so = df_filter.iloc[0][col_tgl]
             df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
-            
-            total_jenis = len(df_filter)
-            total_qty_so = int(df_filter[col_qty].sum())
 
-            # Header Info
             st.info(f"📌 **Nomor SO:** {so_aktif}")
-            
             h_col1, h_col2 = st.columns(2)
             with h_col1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-                st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
             with h_col2:
                 st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
-                st.markdown(f"🔢 **Total Qty SO:** {total_qty_so} Pcs")
             
             st.divider()
 
@@ -159,62 +173,62 @@ else:
                 kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
                 with st.expander(f"📦 {row[col_item]}", expanded=True):
-                    # BARIS INFO LENGKAP: Batch | Exp | Qty SO | Tombol Note
-                    c_info, c_note_toggle = st.columns([4.5, 1])
-                    with c_info:
-                        st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
-                    with c_note_toggle:
+                    st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
+                    
+                    col_in, col_st, col_nt = st.columns([3, 1, 1])
+                    with col_in:
+                        input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
+                    with col_st:
+                        st.write("")
+                        if input_val == qty_target and input_val > 0:
+                            st.success("OK")
+                        else:
+                            valid_all = False
+                            st.write("---")
+                    with col_nt:
+                        st.write("")
                         is_note_active = st.checkbox("📝", key=f"tog_{index}")
                     
-                    # Input Qty & Status
-                    col_in, col_st = st.columns([3, 2])
-                    with col_in:
-                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_{index}", value=0, label_visibility="collapsed")
-                    with col_st:
-                        if input_val == qty_target and input_val > 0:
-                            st.success("✅ OK")
-                        elif input_val == 0:
-                            st.warning("Kosong")
-                            valid_all = False
-                        else:
-                            st.error("❌ Selisih")
-                            valid_all = False
-                    
-                    # Kolom Note
                     note_val = ""
                     if is_note_active:
-                        note_val = st.text_input("Catatan barang:", key=f"n_{index}", placeholder="Isi catatan jika ada...")
+                        note_val = st.text_input("Catatan:", key=f"n_{index}")
                 
+                # Tambahkan data lengkap untuk rekap CSV
                 list_data_final.append({
-                    "kode": kode_brg, "batch": batch_no, "exp": exp_date, "qty": input_val, "note": note_val.strip()
+                    "Waktu_Input": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Petugas": st.session_state['user'],
+                    "Nomor_SO": so_aktif,
+                    "Apotek": nama_apotek,
+                    "Kode_Barang": kode_brg,
+                    "Nama_Barang": row[col_item],
+                    "Batch": batch_no,
+                    "Exp_Date": exp_date,
+                    "Qty_SO": qty_target,
+                    "Qty_Fisik": input_val,
+                    "Catatan": note_val.strip()
                 })
 
             st.divider()
 
             if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                 if valid_all:
+                    # 1. Simpan ke Rekap CSV (Data Report)
+                    simpan_rekap_data(list_data_final)
+                    
+                    # 2. Susun Pesan Telegram (Ringkasan)
                     detail_pesan = ""
                     for d in list_data_final:
-                        if d['note'] != "":
-                            detail_pesan += f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}\n"
-
+                        if d['Catatan'] != "":
+                            detail_pesan += f"- {d['Kode_Barang']} | {d['Batch']} | {d['Exp_Date']} ({int(d['Qty_Fisik'])} pcs)\n  🗒 Note: {d['Catatan']}\n"
                     if detail_pesan == "": detail_pesan = "_Tidak ada catatan khusus._\n"
 
-                    msg = (f"✅ **QC SELESAI**\n"
-                           f"👤 Petugas: {st.session_state['user']}\n"
-                           f"📄 No SO: {so_aktif}\n"
-                           f"📍 Apotek: {nama_apotek}\n"
-                           f"---------------------------\n"
-                           f"{detail_pesan}"
-                           f"---------------------------")
-                    
+                    msg = (f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_pesan}---------------------------")
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
                     
                     simpan_so_selesai(so_aktif)
                     st.session_state['selected_so'] = None
                     st.session_state['page'] = "search"
-                    st.success("Terkirim!")
-                    st.balloons()
+                    st.success("Data tersimpan & Laporan terkirim!")
                     st.rerun()
                 else:
                     st.error("Gagal! Pastikan semua Qty fisik sesuai target.")
