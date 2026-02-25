@@ -34,18 +34,24 @@ if os.path.exists("data_so.csv"):
 
     df[[col_so, col_customer, col_tgl]] = df[[col_so, col_customer, col_tgl]].ffill()
 
-    # FILTER & URUTKAN SO (Sorting)
+    # FILTER & URUTKAN SO
     selesai_list = ambil_daftar_selesai()
     semua_so = df[col_so].unique().tolist()
-    # Kita urutkan list agar rapi (A-Z / 1-9)
     list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
     st.write(f"Sisa SO yang perlu di-QC: **{len(list_so_aktif)}**")
     
-    # Tips: Di kolom ini, tim QC bisa langsung mengetik nomor SO untuk mencari!
-    so_terpilih = st.selectbox("🎯 CARI/PILIH NOMOR SO:", ["-- Ketik Nomor SO di sini --"] + list_so_aktif)
+    # PERUBAHAN DI SINI:
+    # Menggunakan index=None agar kotak langsung kosong & placeholder untuk instruksi
+    so_terpilih = st.selectbox(
+        "🎯 CARI NOMOR SO:", 
+        list_so_aktif, 
+        index=None, 
+        placeholder="Ketik nomor SO di sini..."
+    )
 
-    if so_terpilih != "-- Ketik Nomor SO di sini --":
+    # Hanya jalankan jika so_terpilih tidak kosong
+    if so_terpilih:
         df_filter = df[df[col_so] == so_terpilih]
         apotek = df_filter.iloc[0][col_customer]
         tanggal = df_filter.iloc[0][col_tgl]
@@ -87,5 +93,8 @@ if os.path.exists("data_so.csv"):
                 st.rerun()
             else:
                 st.error("Mohon centang semua barang!")
+    else:
+        # Tampilan jika belum ada SO yang dipilih
+        st.write("👆 *Silakan ketik atau pilih nomor SO di atas untuk memulai.*")
 else:
     st.warning("Silakan Admin upload data terlebih dahulu.")
