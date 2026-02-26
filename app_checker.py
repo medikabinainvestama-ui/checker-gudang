@@ -12,7 +12,7 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (VERSI SUPER COMPACT) ---
+# --- STYLING CSS (AUDIT: RAPAT & AMAN) ---
 st.markdown("""
     <style>
     /* 1. Paksa semua teks tabel ke tengah */
@@ -22,28 +22,35 @@ st.markdown("""
         text-align: center !important;
         vertical-align: middle !important;
     }
+    [data-testid="stDataFrame"] div {
+        text-align: center !important;
+        justify-content: center !important;
+    }
     
-    /* 2. Menghilangkan padding bawaan Streamlit agar lebih rapat */
+    /* 2. Beri jarak aman di paling atas agar tombol navigasi tidak terpotong */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
+        padding-top: 3.5rem !important;
+        padding-bottom: 1rem !important;
     }
     
-    /* 3. Merapatkan Jarak Antar Expander Barang (Sangat Agresif) */
-    .stExpander { 
-        border: 1px solid #ddd; 
+    /* 3. Merapatkan Jarak Antar Expander Barang tanpa merusak elemen lain */
+    div[data-testid="stExpander"] {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        margin-bottom: -15px !important; /* Membuat antar tab menempel rapat */
+    }
+
+    /* 4. Indikator Warna Status dengan margin negatif yang sama agar sinkron */
+    .status-ok { 
+        background-color: #d4edda !important; 
         border-radius: 8px; 
-        margin-bottom: -15px !important; /* Nilai negatif lebih besar untuk merapatkan */
+        margin-bottom: -15px !important; 
     }
-
-    /* 4. Menghilangkan ruang kosong ekstra di bawah elemen input */
-    .stTextInput, .stCheckbox {
-        margin-bottom: -10px !important;
+    .status-err { 
+        background-color: #f8d7da !important; 
+        border-radius: 8px; 
+        margin-bottom: -15px !important; 
     }
-
-    /* 5. Indikator Warna Status */
-    .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
-    .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -99,7 +106,7 @@ def simpan_so_selesai(no_so):
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
-# --- INISIALISASI SESSION STATE (ANTI-LOGOUT) ---
+# --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
     params = st.query_params
     if "u" in params and params["u"] in USER_DB:
@@ -209,6 +216,7 @@ else:
                             status_class = "status-err"
                             icon_status = " ⚠️"
 
+                    # Pembungkus Warna Status
                     st.markdown(f'<div class="{status_class}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
@@ -249,7 +257,7 @@ else:
                         st.balloons(); st.rerun()
                     else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
 
-        # --- MENU 2: DASHBOARD MONITORING (GALANG ONLY) ---
+        # --- MENU 2: DASHBOARD MONITORING ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             if os.path.exists("rekap_qc.csv"):
