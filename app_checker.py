@@ -12,10 +12,15 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (AUDIT: RAPAT & AMAN) ---
+# --- STYLING CSS (DIPERBARUI: SEMBUNYIKAN HEADER STREAMLIT & GITHUB) ---
 st.markdown("""
     <style>
-    /* 1. Paksa semua teks tabel ke tengah */
+    /* 1. Menyembunyikan Header Streamlit (GitHub icon, Fork, dll) */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    
+    /* 2. Paksa semua teks tabel ke tengah */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
@@ -27,20 +32,20 @@ st.markdown("""
         justify-content: center !important;
     }
     
-    /* 2. Beri jarak aman di paling atas agar tombol navigasi tidak terpotong */
+    /* 3. Beri jarak aman di paling atas agar tombol navigasi tidak terpotong */
     .block-container {
-        padding-top: 3.5rem !important;
+        padding-top: 1.5rem !important;
         padding-bottom: 1rem !important;
     }
     
-    /* 3. Merapatkan Jarak Antar Expander Barang tanpa merusak elemen lain */
+    /* 4. Merapatkan Jarak Antar Expander Barang */
     div[data-testid="stExpander"] {
         border: 1px solid #ddd;
         border-radius: 8px;
-        margin-bottom: -15px !important; /* Membuat antar tab menempel rapat */
+        margin-bottom: -15px !important; 
     }
 
-    /* 4. Indikator Warna Status dengan margin negatif yang sama agar sinkron */
+    /* 5. Indikator Warna Status */
     .status-ok { 
         background-color: #d4edda !important; 
         border-radius: 8px; 
@@ -106,7 +111,7 @@ def simpan_so_selesai(no_so):
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
-# --- INISIALISASI SESSION STATE ---
+# --- INISIALISASI SESSION STATE (ANTI-LOGOUT) ---
 if 'auth' not in st.session_state:
     params = st.query_params
     if "u" in params and params["u"] in USER_DB:
@@ -205,7 +210,6 @@ else:
                     
                     val_disp = "" if str(val_q) == "0" else str(val_q)
                     
-                    # Logika Warna & Simbol
                     status_class = ""
                     icon_status = ""
                     if str(val_q) != "0":
@@ -216,7 +220,6 @@ else:
                             status_class = "status-err"
                             icon_status = " ⚠️"
 
-                    # Pembungkus Warna Status
                     st.markdown(f'<div class="{status_class}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
@@ -257,7 +260,7 @@ else:
                         st.balloons(); st.rerun()
                     else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
 
-        # --- MENU 2: DASHBOARD MONITORING ---
+        # --- MENU 2: DASHBOARD MONITORING (GALANG ONLY) ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             if os.path.exists("rekap_qc.csv"):
