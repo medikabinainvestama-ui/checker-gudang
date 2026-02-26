@@ -12,15 +12,24 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (DIPERBARUI: SEMBUNYIKAN HEADER STREAMLIT & GITHUB) ---
+# --- STYLING CSS (AUDIT: SEMBUNYIKAN LOGO & GITHUB, TAMPILKAN SIDEBAR BUTTON) ---
 st.markdown("""
     <style>
-    /* 1. Menyembunyikan Header Streamlit (GitHub icon, Fork, dll) */
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* 1. Sembunyikan Logo Streamlit di pojok kanan bawah (Red Tag) */
     #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .viewerBadge_container__1QSob {display: none !important;}
     
-    /* 2. Paksa semua teks tabel ke tengah */
+    /* 2. Sembunyikan Ikon GitHub, Fork, dan Menu di Header Pojok Kanan Atas */
+    header[data-testid="stHeader"] .stAppDeployButton {display: none !important;}
+    header[data-testid="stHeader"] [data-testid="stHeaderActionElements"] {display: none !important;}
+    
+    /* 3. Pastikan Header tetap ada (supaya tombol sidebar tidak hilang) tapi transparankan backgroundnya */
+    header[data-testid="stHeader"] {
+        background-color: rgba(0,0,0,0);
+    }
+
+    /* 4. Paksa semua teks tabel ke tengah */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
@@ -32,30 +41,20 @@ st.markdown("""
         justify-content: center !important;
     }
     
-    /* 3. Beri jarak aman di paling atas agar tombol navigasi tidak terpotong */
+    /* 5. Jarak aman dan perapatan expander */
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 1rem !important;
     }
-    
-    /* 4. Merapatkan Jarak Antar Expander Barang */
     div[data-testid="stExpander"] {
         border: 1px solid #ddd;
         border-radius: 8px;
         margin-bottom: -15px !important; 
     }
 
-    /* 5. Indikator Warna Status */
-    .status-ok { 
-        background-color: #d4edda !important; 
-        border-radius: 8px; 
-        margin-bottom: -15px !important; 
-    }
-    .status-err { 
-        background-color: #f8d7da !important; 
-        border-radius: 8px; 
-        margin-bottom: -15px !important; 
-    }
+    /* 6. Indikator Warna Status */
+    .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
+    .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -111,7 +110,7 @@ def simpan_so_selesai(no_so):
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
-# --- INISIALISASI SESSION STATE (ANTI-LOGOUT) ---
+# --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
     params = st.query_params
     if "u" in params and params["u"] in USER_DB:
@@ -166,7 +165,6 @@ else:
         df_master = df_master[df_master[col_item].notna()]
         selesai_list = ambil_daftar_selesai()
 
-        # --- MENU 1: PEMERIKSAAN QC ---
         if menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
                 list_so_aktif = sorted([s for s in df_master[col_so].unique() if s not in selesai_list])
@@ -207,34 +205,27 @@ else:
                     val_q = draft_so.get(f"q_{index}", 0)
                     val_n = draft_so.get(f"n_{index}", "")
                     val_t = draft_so.get(f"tog_{index}", False)
-                    
                     val_disp = "" if str(val_q) == "0" else str(val_q)
                     
                     status_class = ""
                     icon_status = ""
                     if str(val_q) != "0":
                         if int(val_q) == target:
-                            status_class = "status-ok"
-                            icon_status = " ✅"
+                            status_class = "status-ok"; icon_status = " ✅"
                         else:
-                            status_class = "status-err"
-                            icon_status = " ⚠️"
+                            status_class = "status-err"; icon_status = " ⚠️"
 
                     st.markdown(f'<div class="{status_class}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
-                        
                         is_note = ct.checkbox("📝", key=f"tog_ui_{index}", value=val_t)
                         draft_so[f"tog_{index}"] = is_note
-
                         u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{index}", value=val_disp, placeholder="0", label_visibility="collapsed")
                         q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
                         draft_so[f"q_{index}"] = q_num
-                        
                         if u_input_raw != "" and q_num != target: valid_all = False
                         elif u_input_raw == "": valid_all = False
-
                         note_text = ""
                         if is_note:
                             note_text = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_n)
@@ -247,7 +238,6 @@ else:
                         "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
 
-                st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
@@ -260,7 +250,6 @@ else:
                         st.balloons(); st.rerun()
                     else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
 
-        # --- MENU 2: DASHBOARD MONITORING (GALANG ONLY) ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             if os.path.exists("rekap_qc.csv"):
@@ -271,10 +260,8 @@ else:
                 klasemen.index += 1
                 st.subheader("🏆 Klasemen Checker")
                 st.table(klasemen)
-
             df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
             df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
-            
             def get_info(row):
                 if row['No SO'] in selesai_list:
                     try:
@@ -282,7 +269,6 @@ else:
                         return "Done QC", ptgs
                     except: return "Done QC", "-"
                 return "Pending QC", "-"
-
             df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_info(x)), axis=1)
             st.subheader("📋 Status Semua No SO")
             st.dataframe(df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
