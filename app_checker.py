@@ -12,7 +12,7 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (FORCE CENTER, STATUS COLORS & COMPACT SPACING) ---
+# --- STYLING CSS (VERSI SUPER COMPACT) ---
 st.markdown("""
     <style>
     /* 1. Paksa semua teks tabel ke tengah */
@@ -22,21 +22,28 @@ st.markdown("""
         text-align: center !important;
         vertical-align: middle !important;
     }
-    [data-testid="stDataFrame"] div {
-        text-align: center !important;
-        justify-content: center !important;
+    
+    /* 2. Menghilangkan padding bawaan Streamlit agar lebih rapat */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
     }
     
-    /* 2. Indikator Warna untuk Expander */
-    .status-ok { background-color: #d4edda !important; border-radius: 8px; padding: 2px; margin-bottom: -10px !important; }
-    .status-err { background-color: #f8d7da !important; border-radius: 8px; padding: 2px; margin-bottom: -10px !important; }
-    
-    /* 3. Merapatkan Jarak Antar Expander Barang */
+    /* 3. Merapatkan Jarak Antar Expander Barang (Sangat Agresif) */
     .stExpander { 
         border: 1px solid #ddd; 
         border-radius: 8px; 
-        margin-bottom: -10px !important; 
+        margin-bottom: -15px !important; /* Nilai negatif lebih besar untuk merapatkan */
     }
+
+    /* 4. Menghilangkan ruang kosong ekstra di bawah elemen input */
+    .stTextInput, .stCheckbox {
+        margin-bottom: -10px !important;
+    }
+
+    /* 5. Indikator Warna Status */
+    .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
+    .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -229,6 +236,7 @@ else:
                         "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
 
+                st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
@@ -241,7 +249,7 @@ else:
                         st.balloons(); st.rerun()
                     else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
 
-        # --- MENU 2: DASHBOARD MONITORING ---
+        # --- MENU 2: DASHBOARD MONITORING (GALANG ONLY) ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             if os.path.exists("rekap_qc.csv"):
@@ -267,8 +275,4 @@ else:
             df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_info(x)), axis=1)
             st.subheader("📋 Status Semua No SO")
             st.dataframe(df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
-            
-            csv_data = df_mon.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Laporan Status (.csv)", csv_data, f"QC_Report_{datetime.now().date()}.csv", "text/csv")
-
     else: st.error("File data_so.csv tidak ditemukan.")
