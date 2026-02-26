@@ -9,7 +9,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Dashboard", layout="wide")
+st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -107,6 +107,8 @@ else:
     if os.path.exists("data_so.csv"):
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
+        
+        # Mapping Kolom
         col_so = 'Nomor # Pesanan Penjualan'
         col_customer = 'Pelanggan'
         col_tgl = 'Tanggal Pesanan Penjualan'
@@ -116,6 +118,7 @@ else:
         col_exp = 'Tgl Kadaluarsa'
         col_qty = 'Kuantitas'
 
+        # Preprocessing
         df_master[col_so] = df_master[col_so].astype(str).str.strip()
         df_master[[col_so, col_customer, col_tgl]] = df_master[[col_so, col_customer, col_tgl]].ffill()
         df_master = df_master[df_master[col_item].notna()]
@@ -143,19 +146,35 @@ else:
 
             elif st.session_state['page'] == "list_barang":
                 so_aktif = st.session_state['selected_so']
-                if st.button("⬅️ Kembali"):
+                if st.button("⬅️ Kembali ke Pencarian"):
                     buka_kunci_so(so_aktif)
                     st.session_state['selected_so'] = None
                     st.session_state['page'] = "search"
                     st.rerun()
 
+                # Filter Data SO Terpilih
                 df_filter = df_master[df_master[col_so] == so_aktif].copy()
                 nama_apotek = df_filter.iloc[0][col_customer]
                 tanggal_so = df_filter.iloc[0][col_tgl]
                 df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
                 
-                st.info(f"📌 **SO:** {so_aktif} | **Apotek:** {nama_apotek}")
+                # Hitung Statistik Header
+                total_jenis = len(df_filter)
+                total_qty_so_val = int(df_filter[col_qty].sum())
+
+                # --- HEADER DETAIL (KEMBALI DITAMPILKAN) ---
+                st.info(f"📌 **Nomor SO:** {so_aktif}")
                 
+                h_col1, h_col2 = st.columns(2)
+                with h_col1:
+                    st.markdown(f"🏢 **Apotek:** {nama_apotek}")
+                    st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
+                with h_col2:
+                    st.markdown(f"📅 **Tanggal SO:** {tanggal_so}")
+                    st.markdown(f"🔢 **Total Qty SO:** {total_qty_so_val} Pcs")
+                
+                st.divider()
+
                 valid_all = True
                 list_data_final = []
                 draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
@@ -170,21 +189,27 @@ else:
                     val_tog_awal = draft_so.get(f"tog_{index}", False)
 
                     with st.expander(f"📦 {row[col_item]}", expanded=True):
-                        c1, c2 = st.columns([4, 1])
-                        c1.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Target:** {qty_target}")
-                        is_note_active = c2.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
+                        # Info Item
+                        c_info, c_note_toggle = st.columns([4.5, 1])
+                        c_info.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Target:** {qty_target}")
+                        is_note_active = c_note_toggle.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
                         draft_so[f"tog_{index}"] = is_note_active
 
+                        # Input Qty
                         col_in, col_st = st.columns([3, 2])
                         input_val = col_in.number_input(f"Qty", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
                         draft_so[f"q_{index}"] = input_val
                         
                         if input_val == qty_target and input_val > 0:
                             col_st.success("✅ OK")
+                        elif input_val == 0:
+                            col_st.warning("Kosong")
+                            valid_all = False
                         else:
-                            col_st.warning("⚠️")
+                            col_st.error("❌ Selisih")
                             valid_all = False
                         
+                        # Note
                         note_val = ""
                         if is_note_active:
                             note_val = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_note_awal)
@@ -204,30 +229,34 @@ else:
                         "Note": note_val.strip()
                     })
 
-                if st.button("✅ SELESAI & KIRIM", use_container_width=True, type="primary"):
+                st.divider()
+                if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
                         detail_msg = ""
                         for d in list_data_final:
                             if d['Note'] != "":
                                 detail_msg += f"- {d['Kode']} | {d['Batch']} | {d['Exp']} ({int(d['Qty_Fisik'])} pcs)\n  🗒 Note: {d['Note']}\n"
+                        
                         msg = f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_msg if detail_msg else '_Tanpa Catatan_'}\n---------------------------"
                         requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
+                        
                         simpan_so_selesai(so_aktif)
                         st.session_state['selected_so'] = None
                         st.session_state['page'] = "search"
+                        st.success("Terkirim!")
+                        st.balloons()
                         st.rerun()
                     else:
-                        st.error("Pastikan semua Qty OK (Sesuai Target)")
+                        st.error("Gagal! Pastikan semua Qty fisik sesuai target.")
 
         # --- MENU 2: DASHBOARD ADMIN ---
         elif menu == "Dashboard Admin":
             st.subheader("📊 Dashboard Report QC")
-            
             if os.path.exists("rekap_qc.csv"):
                 df_rekap = pd.read_csv("rekap_qc.csv")
                 
-                # Baris Metrik (Statistik)
+                # Metrik Dashboard
                 selesai_count = len(df_rekap['SO'].unique())
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Total SO Selesai", selesai_count)
@@ -236,32 +265,30 @@ else:
                 
                 st.divider()
                 
-                # Grafik Sederhana / Tabel Performa
+                # Visualisasi & Tabel
                 c_chart, c_data = st.columns([2, 3])
                 with c_chart:
-                    st.write("🔥 **Top Petugas**")
+                    st.write("🔥 **Performa Petugas**")
                     petugas_perf = df_rekap['Petugas'].value_counts()
                     st.bar_chart(petugas_perf)
                 
                 with c_data:
-                    st.write("📋 **5 Transaksi Terakhir**")
-                    st.dataframe(df_rekap[['Waktu', 'SO', 'Petugas', 'Apotek']].tail(5), use_container_width=True)
+                    st.write("📋 **Log Terakhir**")
+                    st.dataframe(df_rekap[['Waktu', 'SO', 'Petugas', 'Apotek']].tail(10), use_container_width=True)
                 
                 st.divider()
-                
-                # Rincian Lengkap & Download
-                st.write("🔍 **Cari Data Rekap**")
-                search_term = st.text_input("Filter berdasarkan Nama Apotek / No SO:")
+                st.write("🔍 **Filter & Download Data**")
+                search_term = st.text_input("Cari Apotek / No SO:")
                 df_filtered = df_rekap[df_rekap.apply(lambda row: search_term.lower() in row.astype(str).str.lower().values, axis=1)]
                 st.dataframe(df_filtered, use_container_width=True)
                 
                 st.download_button(
-                    label="📥 Download Semua Data (Excel/CSV)",
+                    label="📥 Download Rekap CSV",
                     data=df_rekap.to_csv(index=False),
-                    file_name=f"Report_QC_MBI_{datetime.now().strftime('%d%m%Y')}.csv",
+                    file_name=f"Report_QC_{datetime.now().strftime('%d%m%Y')}.csv",
                     mime="text/csv"
                 )
             else:
-                st.warning("Belum ada data QC yang terselesaikan untuk ditampilkan di dashboard.")
+                st.warning("Belum ada data QC yang terselesaikan.")
     else:
         st.error("File data_so.csv tidak ditemukan.")
