@@ -11,6 +11,16 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 
+# --- STYLING CSS UNTUK WARNA TAB ---
+st.markdown("""
+    <style>
+    /* Mengatur warna latar belakang expander secara dinamis */
+    .stExpander { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
+    .status-ok { background-color: #d4edda !important; border-color: #c3e6cb !important; }
+    .status-error { background-color: #f8d7da !important; border-color: #f5c6cb !important; }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
     params = st.query_params
@@ -65,9 +75,14 @@ def buka_kunci_so(no_so):
             f.flush()
 
 def simpan_so_selesai(no_so):
-    with open("selesai.txt", "a") as f:
-        f.write(no_so.strip() + "\n")
-        f.flush()
+    if os.path.exists("selesai.txt"):
+        with open("selesai.txt", "a") as f:
+            f.write(no_so.strip() + "\n")
+            f.flush()
+    else:
+        with open("selesai.txt", "w") as f:
+            f.write(no_so.strip() + "\n")
+            f.flush()
     buka_kunci_so(no_so)
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
@@ -156,7 +171,7 @@ else:
                 total_jenis = len(df_filter)
                 total_qty_so_val = int(df_filter[col_qty].sum())
 
-                # --- HEADER DETAIL ---
+                # --- HEADER DETAIL (LOGO KARDUS -> OBAT) ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 
                 h_col1, h_col2 = st.columns(2)
@@ -164,7 +179,7 @@ else:
                     st.markdown(f"🏢 **Apotek:** {nama_apotek}")
                     st.markdown(f"📅 **Tanggal SO:** {tanggal_so}")
                 with h_col2:
-                    st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
+                    st.markdown(f"💊 **Total Jenis:** {total_jenis} Item")
                     st.markdown(f"🔢 **Total Qty SO:** {total_qty_so_val} Pcs")
                 
                 st.divider()
@@ -182,26 +197,34 @@ else:
                     val_note_awal = draft_so.get(f"n_{index}", "")
                     val_tog_awal = draft_so.get(f"tog_{index}", False)
 
-                    # --- LOGO OBAT (💊) DAN TAB TERTUTUP ---
-                    with st.expander(f"💊 {row[col_item]}", expanded=False):
+                    # Logika Warna Tab Berdasarkan Input
+                    label_class = ""
+                    if val_qty_awal == qty_target and val_qty_awal > 0:
+                        label_class = " ✅" # Sebagai penanda teks saja karena expander warna via CSS sulit di Streamlit murni
+                    elif val_qty_awal > 0 and val_qty_awal != qty_target:
+                        label_class = " ⚠️"
+
+                    # --- EXPANDER ---
+                    with st.expander(f"💊 {row[col_item]}{label_class}", expanded=False):
+                        # Info Item (LABEL TARGET -> Qty)
                         c_info, c_note_toggle = st.columns([4.5, 1])
-                        c_info.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Target:** {qty_target}")
+                        c_info.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty:** {qty_target}")
                         is_note_active = c_note_toggle.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
                         draft_so[f"tog_{index}"] = is_note_active
 
-                        col_in, col_st = st.columns([3, 2])
-                        input_val = col_in.number_input(f"Qty", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
+                        # Input Qty
+                        input_val = st.number_input(f"Qty Input", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
                         draft_so[f"q_{index}"] = input_val
                         
                         if input_val == qty_target and input_val > 0:
-                            col_st.success("✅ OK")
-                        elif input_val == 0:
-                            col_st.warning("Kosong")
+                            st.success(f"Jumlah Sesuai: {input_val}")
+                        elif input_val > 0:
+                            st.error(f"Selisih! Input: {input_val} / SO: {qty_target}")
                             valid_all = False
                         else:
-                            col_st.error("❌ Selisih")
                             valid_all = False
                         
+                        # Note
                         note_val = ""
                         if is_note_active:
                             note_val = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_note_awal)
@@ -240,7 +263,7 @@ else:
                         st.balloons()
                         st.rerun()
                     else:
-                        st.error("Gagal! Pastikan semua Qty fisik sesuai target.")
+                        st.error("Gagal! Pastikan semua barang sudah sesuai dengan jumlah SO (Tab warna Hijau/Status OK).")
 
         elif menu == "Dashboard Admin":
             st.subheader("📊 Dashboard Report QC")
@@ -252,26 +275,12 @@ else:
                 m2.metric("Total Item Dicek", len(df_rekap))
                 m3.metric("Petugas Aktif", len(df_rekap['Petugas'].unique()))
                 st.divider()
-                c_chart, c_data = st.columns([2, 3])
-                with c_chart:
-                    st.write("🔥 **Performa Petugas**")
-                    petugas_perf = df_rekap['Petugas'].value_counts()
-                    st.bar_chart(petugas_perf)
-                with c_data:
-                    st.write("📋 **Log Terakhir**")
-                    st.dataframe(df_rekap[['Waktu', 'SO', 'Petugas', 'Apotek']].tail(10), use_container_width=True)
-                st.divider()
-                st.write("🔍 **Filter & Download Data**")
-                search_term = st.text_input("Cari Apotek / No SO:")
+                # Tabel & Filter
+                search_term = st.text_input("Filter Apotek / No SO:")
                 df_filtered = df_rekap[df_rekap.apply(lambda row: search_term.lower() in row.astype(str).str.lower().values, axis=1)]
                 st.dataframe(df_filtered, use_container_width=True)
-                st.download_button(
-                    label="📥 Download Rekap CSV",
-                    data=df_rekap.to_csv(index=False),
-                    file_name=f"Report_QC_{datetime.now().strftime('%d%m%Y')}.csv",
-                    mime="text/csv"
-                )
+                st.download_button(label="📥 Download Rekap CSV", data=df_rekap.to_csv(index=False), file_name=f"Report_QC_{datetime.now().strftime('%d%m%Y')}.csv", mime="text/csv")
             else:
-                st.warning("Belum ada data QC yang terselesaikan.")
+                st.warning("Belum ada data QC.")
     else:
         st.error("File data_so.csv tidak ditemukan.")
