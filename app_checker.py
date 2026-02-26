@@ -12,22 +12,21 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 
-# --- STYLING CSS (DIPERBARUI UNTUK TAMPILAN CENTER) ---
+# --- STYLING CSS ---
 st.markdown("""
     <style>
-    /* Membuat teks di st.table berada di tengah */
-    table {
-        margin-left: auto;
-        margin-right: auto;
-    }
-    th, td {
+    /* Mengatur perataan teks global untuk semua jenis tabel Streamlit */
+    div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
+    div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
+    table, thead, tbody, th, td {
         text-align: center !important;
         vertical-align: middle !important;
     }
     
-    /* Membuat teks di st.dataframe berada di tengah */
-    [data-testid="stDataFrame"] div[data-testid="stTable"] td {
+    /* Khusus untuk elemen internal dataframe agar tidak rata kanan (angka) */
+    [data-testid="stDataFrame"] div {
         text-align: center !important;
+        justify-content: center !important;
     }
 
     .stExpander { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
@@ -215,7 +214,24 @@ else:
 
             df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
             df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
-            df_mon['Status'] = df_mon['No SO'].apply(lambda x: "Done QC" if x in selesai_list else "Pending QC")
+            
+            # Deteksi Status & Petugas
+            def get_st_ptgs(row):
+                if row['No SO'] in selesai_list:
+                    try:
+                        ptgs = df_rkp[df_rkp['SO'] == row['No SO']]['Petugas'].iloc[0]
+                        return "Done QC", ptgs
+                    except: return "Done QC", "-"
+                return "Pending QC", "-"
+
+            df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_st_ptgs(x)), axis=1)
+            
             st.subheader("📋 Status Semua No SO")
-            st.dataframe(df_mon, use_container_width=True, hide_index=True)
+            # Urutan kolom diperbaiki
+            df_final = df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']]
+            st.dataframe(df_final, use_container_width=True, hide_index=True)
+            
+            csv_data = df_final.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Laporan Status (.csv)", csv_data, f"QC_Report_{datetime.now().date()}.csv", "text/csv")
+
     else: st.error("File data_so.csv tidak ditemukan.")
