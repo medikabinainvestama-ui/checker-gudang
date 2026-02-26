@@ -10,11 +10,12 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Checker", layout="wide")
+st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (FORCE CENTER & EXPANDER) ---
+# --- STYLING CSS (FORCE CENTER & STATUS COLORS) ---
 st.markdown("""
     <style>
+    /* Paksa semua teks tabel ke tengah */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
@@ -25,7 +26,11 @@ st.markdown("""
         text-align: center !important;
         justify-content: center !important;
     }
-    .stExpander { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
+    
+    /* Indikator Warna untuk Expander */
+    .status-ok { background-color: #d4edda !important; border-radius: 8px; padding: 2px; margin-bottom: 5px; }
+    .status-err { background-color: #f8d7da !important; border-radius: 8px; padding: 2px; margin-bottom: 5px; }
+    .stExpander { border: 1px solid #ddd; border-radius: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -81,7 +86,7 @@ def simpan_so_selesai(no_so):
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
-# --- INISIALISASI SESSION STATE ---
+# --- INISIALISASI SESSION STATE (ANTI-LOGOUT) ---
 if 'auth' not in st.session_state:
     params = st.query_params
     if "u" in params and params["u"] in USER_DB:
@@ -90,7 +95,6 @@ if 'auth' not in st.session_state:
     else:
         st.session_state['auth'] = False
 
-if 'user' not in st.session_state: st.session_state['user'] = ""
 if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
@@ -109,7 +113,7 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
-    # --- SIDEBAR MENU ---
+    # --- SIDEBAR MENU (HAK AKSES) ---
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.session_state['user'].lower() == "galang":
         menu = st.sidebar.radio("Menu Utama", ["Pemeriksaan QC", "Dashboard Monitoring"])
@@ -123,6 +127,7 @@ else:
         st.query_params.clear()
         st.rerun()
 
+    # --- LOAD DATA ---
     if os.path.exists("data_so.csv"):
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
@@ -135,6 +140,7 @@ else:
         df_master = df_master[df_master[col_item].notna()]
         selesai_list = ambil_daftar_selesai()
 
+        # --- MENU 1: PEMERIKSAAN QC ---
         if menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
                 list_so_aktif = sorted([s for s in df_master[col_so].unique() if s not in selesai_list])
@@ -177,13 +183,23 @@ else:
                     val_t = draft_so.get(f"tog_{index}", False)
                     
                     val_disp = "" if str(val_q) == "0" else str(val_q)
-                    icon = " ✅" if str(val_q) != "0" and int(val_q) == target else (" ⚠️" if str(val_q) != "0" else "")
+                    
+                    # Logika Warna & Simbol
+                    status_class = ""
+                    icon_status = ""
+                    if str(val_q) != "0":
+                        if int(val_q) == target:
+                            status_class = "status-ok"
+                            icon_status = " ✅"
+                        else:
+                            status_class = "status-err"
+                            icon_status = " ⚠️"
 
-                    with st.expander(f"💊 {row[col_item]}{icon}", expanded=False):
+                    st.markdown(f'<div class="{status_class}">', unsafe_allow_html=True)
+                    with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
                         
-                        # FITUR NOTE 📝
                         is_note = ct.checkbox("📝", key=f"tog_ui_{index}", value=val_t)
                         draft_so[f"tog_{index}"] = is_note
 
@@ -194,11 +210,11 @@ else:
                         if u_input_raw != "" and q_num != target: valid_all = False
                         elif u_input_raw == "": valid_all = False
 
-                        # INPUT NOTE
                         note_text = ""
                         if is_note:
                             note_text = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_n)
                             draft_so[f"n_{index}"] = note_text.strip()
+                    st.markdown('</div>', unsafe_allow_html=True)
 
                     list_data_final.append({
                         "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Petugas": st.session_state['user'],
@@ -209,16 +225,16 @@ else:
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
-                        # Telegram msg
                         nt = ""
                         for d in list_data_final:
                             if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
                         requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text=✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
-                        
                         simpan_so_selesai(so_aktif)
                         st.session_state['selected_so'], st.session_state['page'] = None, "search"
                         st.balloons(); st.rerun()
+                    else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
 
+        # --- MENU 2: DASHBOARD MONITORING (GALANG ONLY) ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             if os.path.exists("rekap_qc.csv"):
