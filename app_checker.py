@@ -12,25 +12,24 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (HANYA HILANGKAN 2 LOGO BAWAH) ---
+# --- STYLING CSS (AUDIT TOTAL: HILANGKAN LOGO BAWAH SECARA PERMANEN) ---
 st.markdown("""
     <style>
-    /* 1. Sembunyikan Logo Streamlit (M) dan Tombol Manage App di pojok kanan bawah */
+    /* 1. HILANGKAN LOGO STREAMLIT & MANAGE APP (POJOK KANAN BAWAH) */
+    /* Target semua kemungkinan class container logo agar tidak muncul di halaman mana pun */
+    footer {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+    
     .viewerBadge_container__1QSob, 
+    .viewerBadge_link__1QSob, 
     .st-emotion-cache-1aege4m, 
-    div[data-testid="stStatusWidget"] {
+    .st-emotion-cache-zq5wrt,
+    div[data-testid="stStatusWidget"],
+    div[class^="viewerBadge"] {
         display: none !important;
     }
-    footer {
-        visibility: hidden !important;
-    }
 
-    /* 2. HEADER ATAS TETAP NORMAL (GitHub & Sidebar Aman) */
-    header[data-testid="stHeader"] {
-        visibility: visible !important;
-    }
-
-    /* 3. Perataan Teks Tabel ke Tengah */
+    /* 2. PAKSA TEKS TABEL KE TENGAH */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
@@ -42,10 +41,10 @@ st.markdown("""
         justify-content: center !important;
     }
     
-    /* 4. Pengaturan Jarak Rapat Expander Barang */
+    /* 3. JARAK AMAN & MERAPATKAN EXPANDER */
     .block-container {
         padding-top: 2rem !important;
-        padding-bottom: 1rem !important;
+        padding-bottom: 0rem !important;
     }
     div[data-testid="stExpander"] {
         border: 1px solid #ddd;
@@ -53,7 +52,7 @@ st.markdown("""
         margin-bottom: -15px !important; 
     }
 
-    /* 5. Indikator Warna Status (Hijau/Merah) */
+    /* 4. INDIKATOR WARNA STATUS */
     .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
     .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
     </style>
@@ -111,7 +110,7 @@ def simpan_so_selesai(no_so):
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
-# --- INISIALISASI SESSION STATE (ANTI-LOGOUT) ---
+# --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
     params = st.query_params
     if "u" in params and params["u"] in USER_DB:
@@ -239,6 +238,7 @@ else:
                         "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
 
+                st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
