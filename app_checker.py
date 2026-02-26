@@ -12,24 +12,28 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (AUDIT: SEMBUNYIKAN LOGO & GITHUB, TAMPILKAN SIDEBAR BUTTON) ---
+# --- STYLING CSS (DIPERBARUI: HEADER NORMAL, FOOTER BERSIH TOTAL) ---
 st.markdown("""
     <style>
-    /* 1. Sembunyikan Logo Streamlit di pojok kanan bawah (Red Tag) */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .viewerBadge_container__1QSob {display: none !important;}
-    
-    /* 2. Sembunyikan Ikon GitHub, Fork, dan Menu di Header Pojok Kanan Atas */
-    header[data-testid="stHeader"] .stAppDeployButton {display: none !important;}
-    header[data-testid="stHeader"] [data-testid="stHeaderActionElements"] {display: none !important;}
-    
-    /* 3. Pastikan Header tetap ada (supaya tombol sidebar tidak hilang) tapi transparankan backgroundnya */
-    header[data-testid="stHeader"] {
-        background-color: rgba(0,0,0,0);
+    /* 1. SEMBUNYIKAN LOGO DI BAWAH (Streamlit Anchor & Manage App Button) */
+    /* Target khusus untuk container logo di pojok kanan bawah */
+    .viewerBadge_container__1QSob, .viewerBadge_link__1QSob, .st-emotion-cache-1aege4m {
+        display: none !important;
+    }
+    footer {
+        visibility: hidden !important;
+    }
+    #MainMenu {
+        visibility: hidden !important;
     }
 
-    /* 4. Paksa semua teks tabel ke tengah */
+    /* 2. HEADER ATAS DIBIARKAN NORMAL (Agar GitHub & Sidebar Aman) */
+    header[data-testid="stHeader"] {
+        background-color: rgba(255, 255, 255, 0.8);
+        visibility: visible !important;
+    }
+
+    /* 3. Paksa semua teks tabel ke tengah */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
@@ -41,7 +45,7 @@ st.markdown("""
         justify-content: center !important;
     }
     
-    /* 5. Jarak aman dan perapatan expander */
+    /* 4. Jarak aman dan perapatan expander */
     .block-container {
         padding-top: 2rem !important;
         padding-bottom: 1rem !important;
@@ -52,7 +56,7 @@ st.markdown("""
         margin-bottom: -15px !important; 
     }
 
-    /* 6. Indikator Warna Status */
+    /* 5. Indikator Warna Status */
     .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
     .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
     </style>
@@ -238,6 +242,7 @@ else:
                         "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
 
+                st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
