@@ -16,12 +16,6 @@ st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 st.markdown("""
     <style>
     .stExpander { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
-    /* Menghilangkan spin button bawaan browser jika ada */
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { 
-      -webkit-appearance: none; 
-      margin: 0; 
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -172,7 +166,6 @@ else:
                 total_qty_so_val = int(df_filter[col_qty].sum())
 
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
-                
                 h_col1, h_col2 = st.columns(2)
                 with h_col1:
                     st.markdown(f"🏢 **Apotek:** {nama_apotek}")
@@ -193,39 +186,37 @@ else:
                     batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
                     kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
                     
-                    val_qty_awal = draft_so.get(f"q_{index}", "")
+                    val_qty_awal = draft_so.get(f"q_{index}", 0)
                     val_note_awal = draft_so.get(f"n_{index}", "")
                     val_tog_awal = draft_so.get(f"tog_{index}", False)
 
-                    # Validasi Angka Manual
-                    input_clean = re.sub("[^0-9]", "", str(val_qty_awal))
-                    qty_input_numeric = int(input_clean) if input_clean != "" else 0
+                    # LOGIKA AUTO-CLEAR 0: Jika data 0, tampilkan string kosong (biar placeholder muncul)
+                    val_display = "" if str(val_qty_awal) == "0" or str(val_qty_awal) == "" else str(val_qty_awal)
 
                     label_status = ""
-                    if qty_input_numeric == qty_target and input_clean != "":
+                    if str(val_qty_awal) != "0" and int(val_qty_awal) == qty_target:
                         label_status = " ✅"
-                    elif input_clean != "" and qty_input_numeric != qty_target:
+                    elif str(val_qty_awal) != "0" and int(val_qty_awal) != qty_target:
                         label_status = " ⚠️"
 
-                    # --- EXPANDER ---
                     with st.expander(f"💊 {row[col_item]}{label_status}", expanded=False):
                         c_info, c_note_toggle = st.columns([4.5, 1])
                         c_info.write(f"**Code:** {kode_brg} | **Batch:** {batch_no} | **Exp:** {exp_date} | **Qty:** {qty_target}")
                         is_note_active = c_note_toggle.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
                         draft_so[f"tog_{index}"] = is_note_active
 
-                        # MENGGUNAKAN TEXT_INPUT AGAR TIDAK ADA TOMBOL +/-
+                        # INPUT DENGAN PLACEHOLDER 0
                         user_input_raw = st.text_input(
                             f"Qty Input", 
                             key=f"q_ui_{index}", 
-                            value=str(val_qty_awal), 
-                            placeholder="Ketik angka qty...",
+                            value=val_display, 
+                            placeholder="0", 
                             label_visibility="collapsed"
                         )
                         
                         # Simpan ke draft dan konversi ke angka
-                        draft_so[f"q_{index}"] = user_input_raw
                         final_input_qty = int(re.sub("[^0-9]", "", user_input_raw)) if re.sub("[^0-9]", "", user_input_raw) != "" else 0
+                        draft_so[f"q_{index}"] = final_input_qty
 
                         if user_input_raw != "":
                             if final_input_qty == qty_target:
@@ -243,16 +234,9 @@ else:
                     
                     list_data_final.append({
                         "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Petugas": st.session_state['user'],
-                        "SO": so_aktif,
-                        "Apotek": nama_apotek,
-                        "Kode": kode_brg,
-                        "Item": row[col_item],
-                        "Batch": batch_no,
-                        "Exp": exp_date,
-                        "Qty_SO": qty_target,
-                        "Qty_Fisik": final_input_qty,
-                        "Note": note_val.strip()
+                        "Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": nama_apotek,
+                        "Kode": kode_brg, "Item": row[col_item], "Batch": batch_no, "Exp": exp_date,
+                        "Qty_SO": qty_target, "Qty_Fisik": final_input_qty, "Note": note_val.strip()
                     })
 
                 st.divider()
@@ -263,10 +247,8 @@ else:
                         for d in list_data_final:
                             if d['Note'] != "":
                                 detail_msg += f"- {d['Kode']} | {d['Batch']} | {d['Exp']} ({int(d['Qty_Fisik'])} pcs)\n  🗒 Note: {d['Note']}\n"
-                        
                         msg = f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_msg if detail_msg else '_Tanpa Catatan_'}\n---------------------------"
                         requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
-                        
                         simpan_so_selesai(so_aktif)
                         st.session_state['selected_so'] = None
                         st.session_state['page'] = "search"
@@ -274,7 +256,7 @@ else:
                         st.balloons()
                         st.rerun()
                     else:
-                        st.error("Gagal! Pastikan semua barang sudah sesuai (Simbol ✅).")
+                        st.error("Gagal! Pastikan semua barang sudah sesuai.")
 
         elif menu == "Dashboard Admin":
             st.subheader("📊 Dashboard Report QC")
