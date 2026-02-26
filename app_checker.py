@@ -103,7 +103,6 @@ else:
         st.query_params.clear()
         st.rerun()
 
-    # --- LOGIK DATA ---
     if os.path.exists("data_so.csv"):
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
@@ -157,15 +156,15 @@ else:
                 total_jenis = len(df_filter)
                 total_qty_so_val = int(df_filter[col_qty].sum())
 
-                # --- HEADER DETAIL (URUTAN DIPERBAIKI) ---
+                # --- HEADER DETAIL ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 
                 h_col1, h_col2 = st.columns(2)
                 with h_col1:
                     st.markdown(f"🏢 **Apotek:** {nama_apotek}")
-                    st.markdown(f"📅 **Tanggal SO:** {tanggal_so}") # Urutan diperbaiki
+                    st.markdown(f"📅 **Tanggal SO:** {tanggal_so}")
                 with h_col2:
-                    st.markdown(f"📦 **Total Jenis:** {total_jenis} Item") # Urutan diperbaiki
+                    st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
                     st.markdown(f"🔢 **Total Qty SO:** {total_qty_so_val} Pcs")
                 
                 st.divider()
@@ -183,7 +182,8 @@ else:
                     val_note_awal = draft_so.get(f"n_{index}", "")
                     val_tog_awal = draft_so.get(f"tog_{index}", False)
 
-                    with st.expander(f"📦 {row[col_item]}", expanded=True):
+                    # --- LOGO OBAT (💊) DAN TAB TERTUTUP ---
+                    with st.expander(f"💊 {row[col_item]}", expanded=False):
                         c_info, c_note_toggle = st.columns([4.5, 1])
                         c_info.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Target:** {qty_target}")
                         is_note_active = c_note_toggle.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
