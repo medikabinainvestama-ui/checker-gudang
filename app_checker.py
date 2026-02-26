@@ -12,10 +12,10 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (FORCE CENTER & STATUS COLORS) ---
+# --- STYLING CSS (FORCE CENTER, STATUS COLORS & COMPACT SPACING) ---
 st.markdown("""
     <style>
-    /* Paksa semua teks tabel ke tengah */
+    /* 1. Paksa semua teks tabel ke tengah */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
@@ -27,10 +27,16 @@ st.markdown("""
         justify-content: center !important;
     }
     
-    /* Indikator Warna untuk Expander */
-    .status-ok { background-color: #d4edda !important; border-radius: 8px; padding: 2px; margin-bottom: 5px; }
-    .status-err { background-color: #f8d7da !important; border-radius: 8px; padding: 2px; margin-bottom: 5px; }
-    .stExpander { border: 1px solid #ddd; border-radius: 8px; }
+    /* 2. Indikator Warna untuk Expander */
+    .status-ok { background-color: #d4edda !important; border-radius: 8px; padding: 2px; margin-bottom: -10px !important; }
+    .status-err { background-color: #f8d7da !important; border-radius: 8px; padding: 2px; margin-bottom: -10px !important; }
+    
+    /* 3. Merapatkan Jarak Antar Expander Barang */
+    .stExpander { 
+        border: 1px solid #ddd; 
+        border-radius: 8px; 
+        margin-bottom: -10px !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -95,6 +101,7 @@ if 'auth' not in st.session_state:
     else:
         st.session_state['auth'] = False
 
+if 'user' not in st.session_state: st.session_state['user'] = ""
 if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
@@ -113,7 +120,7 @@ if not st.session_state['auth']:
         else:
             st.error("Username atau Password salah!")
 else:
-    # --- SIDEBAR MENU (HAK AKSES) ---
+    # --- SIDEBAR MENU ---
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.session_state['user'].lower() == "galang":
         menu = st.sidebar.radio("Menu Utama", ["Pemeriksaan QC", "Dashboard Monitoring"])
@@ -234,7 +241,7 @@ else:
                         st.balloons(); st.rerun()
                     else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
 
-        # --- MENU 2: DASHBOARD MONITORING (GALANG ONLY) ---
+        # --- MENU 2: DASHBOARD MONITORING ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             if os.path.exists("rekap_qc.csv"):
@@ -260,4 +267,8 @@ else:
             df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_info(x)), axis=1)
             st.subheader("📋 Status Semua No SO")
             st.dataframe(df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
+            
+            csv_data = df_mon.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Laporan Status (.csv)", csv_data, f"QC_Report_{datetime.now().date()}.csv", "text/csv")
+
     else: st.error("File data_so.csv tidak ditemukan.")
