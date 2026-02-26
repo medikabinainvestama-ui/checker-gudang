@@ -12,23 +12,19 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 
-# --- STYLING CSS ---
+# --- STYLING CSS (FORCE CENTER & EXPANDER) ---
 st.markdown("""
     <style>
-    /* Mengatur perataan teks global untuk semua jenis tabel Streamlit */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td {
         text-align: center !important;
         vertical-align: middle !important;
     }
-    
-    /* Khusus untuk elemen internal dataframe agar tidak rata kanan (angka) */
     [data-testid="stDataFrame"] div {
         text-align: center !important;
         justify-content: center !important;
     }
-
     .stExpander { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
@@ -177,29 +173,51 @@ else:
                 for index, row in df_filter.iterrows():
                     target = int(float(row[col_qty]))
                     val_q = draft_so.get(f"q_{index}", 0)
+                    val_n = draft_so.get(f"n_{index}", "")
+                    val_t = draft_so.get(f"tog_{index}", False)
+                    
                     val_disp = "" if str(val_q) == "0" else str(val_q)
                     icon = " ✅" if str(val_q) != "0" and int(val_q) == target else (" ⚠️" if str(val_q) != "0" else "")
 
                     with st.expander(f"💊 {row[col_item]}{icon}", expanded=False):
-                        st.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
+                        ci, ct = st.columns([4.5, 1])
+                        ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
+                        
+                        # FITUR NOTE 📝
+                        is_note = ct.checkbox("📝", key=f"tog_ui_{index}", value=val_t)
+                        draft_so[f"tog_{index}"] = is_note
+
                         u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{index}", value=val_disp, placeholder="0", label_visibility="collapsed")
                         q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
                         draft_so[f"q_{index}"] = q_num
+                        
                         if u_input_raw != "" and q_num != target: valid_all = False
                         elif u_input_raw == "": valid_all = False
+
+                        # INPUT NOTE
+                        note_text = ""
+                        if is_note:
+                            note_text = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_n)
+                            draft_so[f"n_{index}"] = note_text.strip()
 
                     list_data_final.append({
                         "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Petugas": st.session_state['user'],
                         "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item],
-                        "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": ""
+                        "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
 
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
+                        # Telegram msg
+                        nt = ""
+                        for d in list_data_final:
+                            if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
+                        requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text=✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
+                        
                         simpan_so_selesai(so_aktif)
                         st.session_state['selected_so'], st.session_state['page'] = None, "search"
-                        st.rerun()
+                        st.balloons(); st.rerun()
 
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
@@ -215,8 +233,7 @@ else:
             df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
             df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
             
-            # Deteksi Status & Petugas
-            def get_st_ptgs(row):
+            def get_info(row):
                 if row['No SO'] in selesai_list:
                     try:
                         ptgs = df_rkp[df_rkp['SO'] == row['No SO']]['Petugas'].iloc[0]
@@ -224,14 +241,7 @@ else:
                     except: return "Done QC", "-"
                 return "Pending QC", "-"
 
-            df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_st_ptgs(x)), axis=1)
-            
+            df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_info(x)), axis=1)
             st.subheader("📋 Status Semua No SO")
-            # Urutan kolom diperbaiki
-            df_final = df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']]
-            st.dataframe(df_final, use_container_width=True, hide_index=True)
-            
-            csv_data = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Laporan Status (.csv)", csv_data, f"QC_Report_{datetime.now().date()}.csv", "text/csv")
-
+            st.dataframe(df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
     else: st.error("File data_so.csv tidak ditemukan.")
