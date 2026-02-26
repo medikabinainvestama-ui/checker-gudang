@@ -14,10 +14,7 @@ st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 # --- STYLING CSS UNTUK WARNA TAB ---
 st.markdown("""
     <style>
-    /* Mengatur warna latar belakang expander secara dinamis */
     .stExpander { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
-    .status-ok { background-color: #d4edda !important; border-color: #c3e6cb !important; }
-    .status-error { background-color: #f8d7da !important; border-color: #f5c6cb !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -171,7 +168,6 @@ else:
                 total_jenis = len(df_filter)
                 total_qty_so_val = int(df_filter[col_qty].sum())
 
-                # --- HEADER DETAIL (LOGO KARDUS -> OBAT) ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 
                 h_col1, h_col2 = st.columns(2)
@@ -192,27 +188,26 @@ else:
                     qty_target = int(float(row[col_qty]))
                     exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
                     batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
+                    kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
                     
                     val_qty_awal = draft_so.get(f"q_{index}", 0)
                     val_note_awal = draft_so.get(f"n_{index}", "")
                     val_tog_awal = draft_so.get(f"tog_{index}", False)
 
-                    # Logika Warna Tab Berdasarkan Input
-                    label_class = ""
+                    label_status = ""
                     if val_qty_awal == qty_target and val_qty_awal > 0:
-                        label_class = " ✅" # Sebagai penanda teks saja karena expander warna via CSS sulit di Streamlit murni
+                        label_status = " ✅"
                     elif val_qty_awal > 0 and val_qty_awal != qty_target:
-                        label_class = " ⚠️"
+                        label_status = " ⚠️"
 
                     # --- EXPANDER ---
-                    with st.expander(f"💊 {row[col_item]}{label_class}", expanded=False):
-                        # Info Item (LABEL TARGET -> Qty)
+                    with st.expander(f"💊 {row[col_item]}{label_status}", expanded=False):
+                        # Info Item (KODE BARANG DI DEPAN BATCH)
                         c_info, c_note_toggle = st.columns([4.5, 1])
-                        c_info.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty:** {qty_target}")
+                        c_info.write(f"**Code:** {kode_brg} | **Batch:** {batch_no} | **Exp:** {exp_date} | **Qty:** {qty_target}")
                         is_note_active = c_note_toggle.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
                         draft_so[f"tog_{index}"] = is_note_active
 
-                        # Input Qty
                         input_val = st.number_input(f"Qty Input", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
                         draft_so[f"q_{index}"] = input_val
                         
@@ -224,7 +219,6 @@ else:
                         else:
                             valid_all = False
                         
-                        # Note
                         note_val = ""
                         if is_note_active:
                             note_val = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_note_awal)
@@ -235,7 +229,7 @@ else:
                         "Petugas": st.session_state['user'],
                         "SO": so_aktif,
                         "Apotek": nama_apotek,
-                        "Kode": row[col_kode],
+                        "Kode": kode_brg,
                         "Item": row[col_item],
                         "Batch": batch_no,
                         "Exp": exp_date,
@@ -263,7 +257,7 @@ else:
                         st.balloons()
                         st.rerun()
                     else:
-                        st.error("Gagal! Pastikan semua barang sudah sesuai dengan jumlah SO (Tab warna Hijau/Status OK).")
+                        st.error("Gagal! Pastikan semua barang sudah sesuai.")
 
         elif menu == "Dashboard Admin":
             st.subheader("📊 Dashboard Report QC")
@@ -275,7 +269,6 @@ else:
                 m2.metric("Total Item Dicek", len(df_rekap))
                 m3.metric("Petugas Aktif", len(df_rekap['Petugas'].unique()))
                 st.divider()
-                # Tabel & Filter
                 search_term = st.text_input("Filter Apotek / No SO:")
                 df_filtered = df_rekap[df_rekap.apply(lambda row: search_term.lower() in row.astype(str).str.lower().values, axis=1)]
                 st.dataframe(df_filtered, use_container_width=True)
