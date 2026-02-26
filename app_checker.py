@@ -10,7 +10,7 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Admin Center", layout="wide")
+st.set_page_config(page_title="QC MBI - Checker", layout="wide")
 
 # --- STYLING CSS ---
 st.markdown("""
@@ -68,6 +68,8 @@ def simpan_so_selesai(no_so):
         f.write(no_so.strip() + "\n")
         f.flush()
     buka_kunci_so(no_so)
+    if no_so in st.session_state['qc_drafts']:
+        del st.session_state['qc_drafts'][no_so]
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -96,6 +98,8 @@ if not st.session_state['auth']:
 else:
     # --- SIDEBAR MENU ---
     st.sidebar.title(f"👤 {st.session_state['user']}")
+    
+    # Hak Akses Menu Dashboard (Hanya Galang)
     if st.session_state['user'].lower() == "galang":
         menu = st.sidebar.radio("Menu Utama", ["Pemeriksaan QC", "Dashboard Monitoring"])
     else:
@@ -103,6 +107,8 @@ else:
         st.sidebar.info("Mode: Checker Gudang")
 
     if st.sidebar.button("Log Out"):
+        if st.session_state['selected_so']:
+            buka_kunci_so(st.session_state['selected_so'])
         st.session_state['auth'] = False
         st.rerun()
 
@@ -110,14 +116,9 @@ else:
     if os.path.exists("data_so.csv"):
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
-        col_so = 'Nomor # Pesanan Penjualan'
-        col_customer = 'Pelanggan'
-        col_tgl = 'Tanggal Pesanan Penjualan'
-        col_qty = 'Kuantitas'
-        col_item = 'Nama Barang'
-        col_kode = 'Kode #'
-        col_batch = 'No Seri/Produksi'
-        col_exp = 'Tgl Kadaluarsa'
+        col_so, col_customer, col_tgl = 'Nomor # Pesanan Penjualan', 'Pelanggan', 'Tanggal Pesanan Penjualan'
+        col_qty, col_item, col_kode = 'Kuantitas', 'Nama Barang', 'Kode #'
+        col_batch, col_exp = 'No Seri/Produksi', 'Tgl Kadaluarsa'
 
         df_master[col_so] = df_master[col_so].astype(str).str.strip()
         df_master[[col_so, col_customer, col_tgl]] = df_master[[col_so, col_customer, col_tgl]].ffill()
@@ -125,12 +126,11 @@ else:
         
         selesai_list = ambil_daftar_selesai()
 
-        # --- MENU 1: PEMERIKSAAN QC (DIPERBAIKI) ---
+        # --- MENU 1: PEMERIKSAAN QC ---
         if menu == "Pemeriksaan QC":
-            list_so_aktif = sorted([s for s in df_master[col_so].unique() if s not in selesai_list])
-
-            # Tampilan Halaman Cari SO
+            # Halaman A: Pencarian SO
             if st.session_state['page'] == "search":
+                list_so_aktif = sorted([s for s in df_master[col_so].unique() if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
                 so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
                 
@@ -146,7 +146,7 @@ else:
                             st.session_state['qc_drafts'][so_dipilih] = {}
                         st.rerun()
 
-            # Tampilan Halaman List Barang (Draft Autosave Tetap Ada)
+            # Halaman B: Daftar Barang dalam SO
             elif st.session_state['page'] == "list_barang":
                 so_aktif = st.session_state['selected_so']
                 if st.button("⬅️ Kembali ke Pencarian"):
@@ -156,95 +156,112 @@ else:
                     st.rerun()
 
                 df_filter = df_master[df_master[col_so] == so_aktif].copy()
-                nama_apotek = df_filter.iloc[0][col_customer]
-                tanggal_so = df_filter.iloc[0][col_tgl]
+                nama_apotek, tgl_so = df_filter.iloc[0][col_customer], df_filter.iloc[0][col_tgl]
                 df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
                 
-                total_jenis = len(df_filter)
-                total_qty_so_val = int(df_filter[col_qty].sum())
-
+                # Header Detail
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
-                h_col1, h_col2 = st.columns(2)
-                with h_col1:
-                    st.markdown(f"🏢 **Apotek:** {nama_apotek}")
-                    st.markdown(f"📅 **Tanggal SO:** {tanggal_so}")
-                with h_col2:
-                    st.markdown(f"💊 **Total Jenis:** {total_jenis} Item")
-                    st.markdown(f"🔢 **Total Qty SO:** {total_qty_so_val} Pcs")
-                
+                h1, h2 = st.columns(2)
+                h1.markdown(f"🏢 **Apotek:** {nama_apotek}\n\n📅 **Tanggal SO:** {tgl_so}")
+                h2.markdown(f"💊 **Total Jenis:** {len(df_filter)} Item\n\n🔢 **Total Qty SO:** {int(df_filter[col_qty].sum())} Pcs")
                 st.divider()
 
-                valid_all = True
-                list_data_final = []
+                valid_all, list_data_final = True, []
                 draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
 
                 for index, row in df_filter.iterrows():
-                    qty_target = int(float(row[col_qty]))
-                    exp_date = row[col_exp] if pd.notna(row[col_exp]) else "-"
-                    batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
-                    kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
-                    
-                    val_qty_awal = draft_so.get(f"q_{index}", 0)
-                    val_display = "" if str(val_qty_awal) == "0" else str(val_qty_awal)
+                    target = int(float(row[col_qty]))
+                    val_q = draft_so.get(f"q_{index}", 0)
+                    val_n = draft_so.get(f"n_{index}", "")
+                    val_t = draft_so.get(f"tog_{index}", False)
 
-                    label_status = " ✅" if str(val_qty_awal) != "0" and int(val_qty_awal) == qty_target else (" ⚠️" if str(val_qty_awal) != "0" else "")
+                    # Indikator warna tab (Simbol)
+                    icon = " ✅" if str(val_q) != "0" and int(val_q) == target else (" ⚠️" if str(val_q) != "0" else "")
+                    val_disp = "" if str(val_q) == "0" else str(val_q)
 
-                    with st.expander(f"💊 {row[col_item]}{label_status}", expanded=False):
-                        st.write(f"**Code:** {kode_brg} | **Batch:** {batch_no} | **Exp:** {exp_date} | **Qty:** {qty_target}")
-                        
-                        user_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{index}", value=val_display, placeholder="0", label_visibility="collapsed")
-                        final_input_qty = int(re.sub("[^0-9]", "", user_input_raw)) if re.sub("[^0-9]", "", user_input_raw) != "" else 0
-                        draft_so[f"q_{index}"] = final_input_qty
+                    with st.expander(f"💊 {row[col_item]}{icon}", expanded=False):
+                        # Info detail (Note Checkbox 📝 ada di sini)
+                        ci, ct = st.columns([4.5, 1])
+                        ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
+                        is_note = ct.checkbox("📝", key=f"tog_ui_{index}", value=val_t)
+                        draft_so[f"tog_{index}"] = is_note
 
-                        if user_input_raw != "":
-                            if final_input_qty == qty_target: st.success(f"Jumlah Sesuai: {final_input_qty}")
+                        # Input Qty (Tanpa +/- dan Auto-Clear 0)
+                        u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{index}", value=val_disp, placeholder="0", label_visibility="collapsed")
+                        q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
+                        draft_so[f"q_{index}"] = q_num
+
+                        if u_input_raw != "":
+                            if q_num == target: st.success(f"Jumlah Sesuai: {q_num}")
                             else: 
-                                st.error(f"Selisih! Input: {final_input_qty} / SO: {qty_target}")
+                                st.error(f"Selisih! SO: {target}")
                                 valid_all = False
                         else: valid_all = False
+                        
+                        # Kolom Note jika diaktifkan
+                        n_val = ""
+                        if is_note:
+                            n_val = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_n)
+                            draft_so[f"n_{index}"] = n_val.strip()
 
                     list_data_final.append({
-                        "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": nama_apotek,
-                        "Kode": kode_brg, "Item": row[col_item], "Batch": batch_no, "Exp": exp_date,
-                        "Qty_SO": qty_target, "Qty_Fisik": final_input_qty, "Note": ""
+                        "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Petugas": st.session_state['user'],
+                        "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item],
+                        "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_val
                     })
 
+                st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
+                        # Susun pesan Telegram hanya untuk barang yang ada catatan
+                        msg_note = ""
+                        for d in list_data_final:
+                            if d['Note']: msg_note += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
+                        
+                        telegram_msg = f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{msg_note if msg_note else '_Tanpa Catatan_'}"
+                        requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={telegram_msg}")
+                        
                         simpan_so_selesai(so_aktif)
-                        st.session_state['selected_so'] = None
-                        st.session_state['page'] = "search"
-                        st.balloons()
-                        st.rerun()
+                        st.session_state['selected_so'], st.session_state['page'] = None, "search"
+                        st.balloons(); st.rerun()
+                    else:
+                        st.error("Gagal! Pastikan semua jumlah sudah sesuai (Simbol ✅).")
 
-        # --- MENU 2: DASHBOARD MONITORING (MODIFIKASI) ---
+        # --- MENU 2: DASHBOARD MONITORING (KHUSUS GALANG) ---
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring & Klasemen QC")
             
-            # Klasemen
+            # Klasemen Berdasarkan Total Jenis
             if os.path.exists("rekap_qc.csv"):
-                df_rekap = pd.read_csv("rekap_qc.csv")
-                klasemen = df_rekap.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
+                df_rkp = pd.read_csv("rekap_qc.csv")
+                klasemen = df_rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
                 klasemen.columns = ['Nama QC', 'Total SO', 'Total Jenis Barang', 'Total Qty SO']
                 klasemen = klasemen.sort_values(by='Total Jenis Barang', ascending=False).reset_index(drop=True)
                 klasemen.index += 1
                 st.subheader("🏆 Klasemen Checker")
                 st.table(klasemen)
 
-            # Report Status SO
-            df_summary = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
-            df_summary.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
+            # Laporan Status Semua SO
+            df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
+            df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
             
-            def get_status_info(row):
+            # Deteksi Status & Petugas
+            def check_st(row):
                 if row['No SO'] in selesai_list:
-                    return "Done QC", "-" # Bisa dikembangkan ambil nama petugas dari rekap_qc.csv
+                    try:
+                        ptgs = df_rkp[df_rkp['SO'] == row['No SO']]['Petugas'].iloc[0]
+                        return "Done QC", ptgs
+                    except: return "Done QC", "-"
                 return "Pending QC", "-"
 
-            df_summary[['Status', 'Nama QC']] = df_summary.apply(lambda x: pd.Series(get_status_info(x)), axis=1)
+            df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(check_st(x)), axis=1)
             st.subheader("📋 Status Semua No SO")
-            st.dataframe(df_summary[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
+            st.dataframe(df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
+            
+            # Download Laporan
+            csv_data = df_mon.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Laporan Status (.csv)", csv_data, f"QC_Report_{datetime.now().date()}.csv", "text/csv")
 
     else:
         st.error("File data_so.csv tidak ditemukan.")
