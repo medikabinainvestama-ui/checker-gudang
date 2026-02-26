@@ -8,19 +8,25 @@ from users import USER_DB
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
-st.set_page_config(page_title="QC MBI - Auto Save", layout="centered")
+st.set_page_config(page_title="QC MBI - Stable Session", layout="centered")
 
-# --- INISIALISASI SESSION STATE ---
+# --- INISIALISASI SESSION STATE (DENGAN PENYELAMAT SESI) ---
+# Menggunakan query params sebagai alternatif sederhana 'cookie' agar login lebih awet
 if 'auth' not in st.session_state:
-    st.session_state['auth'] = False
+    # Cek apakah ada info login di URL (berguna saat refresh halaman)
+    params = st.query_params
+    if "user" in params and params["user"] in USER_DB:
+        st.session_state['auth'] = True
+        st.session_state['user'] = params["user"].capitalize()
+    else:
+        st.session_state['auth'] = False
+
 if 'user' not in st.session_state:
     st.session_state['user'] = ""
 if 'page' not in st.session_state:
     st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state:
     st.session_state['selected_so'] = None
-
-# Wadah untuk menyimpan draft inputan (Qty dan Note)
 if 'qc_drafts' not in st.session_state:
     st.session_state['qc_drafts'] = {}
 
@@ -58,7 +64,6 @@ def simpan_so_selesai(no_so):
         f.write(no_so.strip() + "\n")
         f.flush()
     buka_kunci_so(no_so)
-    # Hapus draft setelah selesai agar bersih
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
@@ -77,15 +82,19 @@ if not st.session_state['auth']:
         if u_input in USER_DB and USER_DB[u_input] == p_input:
             st.session_state['auth'] = True
             st.session_state['user'] = u_input.capitalize()
+            # Simpan user ke query params agar tidak gampang log out saat refresh
+            st.query_params["user"] = u_input
             st.rerun()
         else:
             st.error("Username atau Password salah!")
 else:
+    # SIDEBAR
     st.sidebar.title(f"👤 {st.session_state['user']}")
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']:
             buka_kunci_so(st.session_state['selected_so'])
         st.session_state['auth'] = False
+        st.query_params.clear() # Hapus jejak login
         st.rerun()
 
     if os.path.exists("data_so.csv"):
@@ -109,11 +118,9 @@ else:
         semua_so = [s for s in df[col_so].unique().tolist() if s not in ['nan', 'None', '']]
         list_so_aktif = sorted([so for so in semua_so if so not in selesai_list])
 
-        # --- HALAMAN 1: PENCARIAN ---
         if st.session_state['page'] == "search":
             st.title("🎯 Cari Nomor SO")
             so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
-
             if so_dipilih:
                 current_locks = ambil_semua_lock()
                 if so_dipilih in current_locks and current_locks[so_dipilih] != st.session_state['user']:
@@ -122,15 +129,12 @@ else:
                     kunci_so(so_dipilih, st.session_state['user'])
                     st.session_state['selected_so'] = so_dipilih
                     st.session_state['page'] = "list_barang"
-                    # Inisialisasi draft untuk SO ini jika belum ada
                     if so_dipilih not in st.session_state['qc_drafts']:
                         st.session_state['qc_drafts'][so_dipilih] = {}
                     st.rerun()
 
-        # --- HALAMAN 2: LIST BARANG ---
         elif st.session_state['page'] == "list_barang":
             so_aktif = st.session_state['selected_so']
-            
             if st.button("⬅️ Kembali ke Pencarian"):
                 buka_kunci_so(so_aktif)
                 st.session_state['selected_so'] = None
@@ -142,24 +146,17 @@ else:
             tanggal_so = df_filter.iloc[0][col_tgl]
             df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
             
-            total_jenis = len(df_filter)
-            total_qty_so = int(df_filter[col_qty].sum())
-
             st.info(f"📌 **Nomor SO:** {so_aktif}")
             h_col1, h_col2 = st.columns(2)
             with h_col1:
                 st.markdown(f"🏢 **Apotek:**\n{nama_apotek}")
-                st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
             with h_col2:
                 st.markdown(f"📅 **Tanggal SO:**\n{tanggal_so}")
-                st.markdown(f"🔢 **Total Qty SO:** {total_qty_so} Pcs")
             
             st.divider()
 
             valid_all = True
             list_data_final = []
-
-            # Ambil draft data untuk SO ini
             draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
 
             for index, row in df_filter.iterrows():
@@ -168,7 +165,6 @@ else:
                 batch_no = row[col_batch] if pd.notna(row[col_batch]) else "-"
                 kode_brg = row[col_kode] if pd.notna(row[col_kode]) else "-"
 
-                # Cek apakah ada nilai di draft
                 val_qty_awal = draft_so.get(f"q_{index}", 0)
                 val_note_awal = draft_so.get(f"n_{index}", "")
                 val_tog_awal = draft_so.get(f"tog_{index}", False)
@@ -179,13 +175,11 @@ else:
                         st.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Qty SO:** {qty_target}")
                     with c_note_toggle:
                         is_note_active = st.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
-                        # Simpan status toggle ke draft
                         draft_so[f"tog_{index}"] = is_note_active
                     
                     col_in, col_st = st.columns([3, 2])
                     with col_in:
-                        input_val = st.number_input(f"Input Qty Fisik", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
-                        # Simpan angka Qty ke draft setiap kali berubah
+                        input_val = st.number_input(f"Input Qty", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
                         draft_so[f"q_{index}"] = input_val
                     with col_st:
                         if input_val == qty_target and input_val > 0:
@@ -199,8 +193,7 @@ else:
                     
                     note_val = ""
                     if is_note_active:
-                        note_val = st.text_input("Catatan barang:", key=f"n_ui_{index}", value=val_note_awal, placeholder="Isi catatan jika ada...")
-                        # Simpan teks catatan ke draft
+                        note_val = st.text_input("Catatan barang:", key=f"n_ui_{index}", value=val_note_awal)
                         draft_so[f"n_{index}"] = note_val.strip()
                 
                 list_data_final.append({
@@ -215,12 +208,9 @@ else:
                     for d in list_data_final:
                         if d['note'] != "":
                             detail_pesan += f"- {d['kode']} | {d['batch']} | {d['exp']} ({int(d['qty'])} pcs)\n  🗒 Note: {d['note']}\n"
-
                     if detail_pesan == "": detail_pesan = "_Tidak ada catatan khusus._\n"
-
                     msg = (f"✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{detail_pesan}---------------------------")
                     requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={msg}")
-                    
                     simpan_so_selesai(so_aktif)
                     st.session_state['selected_so'] = None
                     st.session_state['page'] = "search"
