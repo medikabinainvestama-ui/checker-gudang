@@ -18,5 +18,9 @@ USER_DB = {
     "wibi": "qc123",
     "fahri": "qc123",
     "himawan": "qc123",
-    "ogik": "qc123"
+    "ogik": "qc123",
+    "samsuri": "qc123",
+    "m.rizki": "qc123",
+    "haldi": "qc123",
+    "galang": "Galingsss11!"
 }
