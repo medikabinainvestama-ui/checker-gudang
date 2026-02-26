@@ -108,7 +108,6 @@ else:
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
         
-        # Mapping Kolom
         col_so = 'Nomor # Pesanan Penjualan'
         col_customer = 'Pelanggan'
         col_tgl = 'Tanggal Pesanan Penjualan'
@@ -118,12 +117,10 @@ else:
         col_exp = 'Tgl Kadaluarsa'
         col_qty = 'Kuantitas'
 
-        # Preprocessing
         df_master[col_so] = df_master[col_so].astype(str).str.strip()
         df_master[[col_so, col_customer, col_tgl]] = df_master[[col_so, col_customer, col_tgl]].ffill()
         df_master = df_master[df_master[col_item].notna()]
 
-        # --- MENU 1: PEMERIKSAAN QC ---
         if menu == "Pemeriksaan QC":
             selesai_list = ambil_daftar_selesai()
             semua_so = [s for s in df_master[col_so].unique().tolist() if s not in ['nan', 'None', '']]
@@ -152,25 +149,23 @@ else:
                     st.session_state['page'] = "search"
                     st.rerun()
 
-                # Filter Data SO Terpilih
                 df_filter = df_master[df_master[col_so] == so_aktif].copy()
                 nama_apotek = df_filter.iloc[0][col_customer]
                 tanggal_so = df_filter.iloc[0][col_tgl]
                 df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
                 
-                # Hitung Statistik Header
                 total_jenis = len(df_filter)
                 total_qty_so_val = int(df_filter[col_qty].sum())
 
-                # --- HEADER DETAIL (KEMBALI DITAMPILKAN) ---
+                # --- HEADER DETAIL (URUTAN DIPERBAIKI) ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 
                 h_col1, h_col2 = st.columns(2)
                 with h_col1:
                     st.markdown(f"🏢 **Apotek:** {nama_apotek}")
-                    st.markdown(f"📦 **Total Jenis:** {total_jenis} Item")
+                    st.markdown(f"📅 **Tanggal SO:** {tanggal_so}") # Urutan diperbaiki
                 with h_col2:
-                    st.markdown(f"📅 **Tanggal SO:** {tanggal_so}")
+                    st.markdown(f"📦 **Total Jenis:** {total_jenis} Item") # Urutan diperbaiki
                     st.markdown(f"🔢 **Total Qty SO:** {total_qty_so_val} Pcs")
                 
                 st.divider()
@@ -189,13 +184,11 @@ else:
                     val_tog_awal = draft_so.get(f"tog_{index}", False)
 
                     with st.expander(f"📦 {row[col_item]}", expanded=True):
-                        # Info Item
                         c_info, c_note_toggle = st.columns([4.5, 1])
                         c_info.write(f"**Batch:** {batch_no} | **Exp:** {exp_date} | **Target:** {qty_target}")
                         is_note_active = c_note_toggle.checkbox("📝", key=f"tog_ui_{index}", value=val_tog_awal)
                         draft_so[f"tog_{index}"] = is_note_active
 
-                        # Input Qty
                         col_in, col_st = st.columns([3, 2])
                         input_val = col_in.number_input(f"Qty", min_value=0, step=1, key=f"q_ui_{index}", value=val_qty_awal, label_visibility="collapsed")
                         draft_so[f"q_{index}"] = input_val
@@ -209,7 +202,6 @@ else:
                             col_st.error("❌ Selisih")
                             valid_all = False
                         
-                        # Note
                         note_val = ""
                         if is_note_active:
                             note_val = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_note_awal)
@@ -250,38 +242,29 @@ else:
                     else:
                         st.error("Gagal! Pastikan semua Qty fisik sesuai target.")
 
-        # --- MENU 2: DASHBOARD ADMIN ---
         elif menu == "Dashboard Admin":
             st.subheader("📊 Dashboard Report QC")
             if os.path.exists("rekap_qc.csv"):
                 df_rekap = pd.read_csv("rekap_qc.csv")
-                
-                # Metrik Dashboard
                 selesai_count = len(df_rekap['SO'].unique())
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Total SO Selesai", selesai_count)
                 m2.metric("Total Item Dicek", len(df_rekap))
                 m3.metric("Petugas Aktif", len(df_rekap['Petugas'].unique()))
-                
                 st.divider()
-                
-                # Visualisasi & Tabel
                 c_chart, c_data = st.columns([2, 3])
                 with c_chart:
                     st.write("🔥 **Performa Petugas**")
                     petugas_perf = df_rekap['Petugas'].value_counts()
                     st.bar_chart(petugas_perf)
-                
                 with c_data:
                     st.write("📋 **Log Terakhir**")
                     st.dataframe(df_rekap[['Waktu', 'SO', 'Petugas', 'Apotek']].tail(10), use_container_width=True)
-                
                 st.divider()
                 st.write("🔍 **Filter & Download Data**")
                 search_term = st.text_input("Cari Apotek / No SO:")
                 df_filtered = df_rekap[df_rekap.apply(lambda row: search_term.lower() in row.astype(str).str.lower().values, axis=1)]
                 st.dataframe(df_filtered, use_container_width=True)
-                
                 st.download_button(
                     label="📥 Download Rekap CSV",
                     data=df_rekap.to_csv(index=False),
