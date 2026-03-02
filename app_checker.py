@@ -12,47 +12,21 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (AUDIT TOTAL: HILANGKAN LOGO BAWAH SECARA PERMANEN) ---
+# --- STYLING CSS ---
 st.markdown("""
     <style>
-    /* 1. HILANGKAN LOGO STREAMLIT & MANAGE APP (POJOK KANAN BAWAH) */
-    /* Target semua kemungkinan class container logo agar tidak muncul di halaman mana pun */
     footer {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
-    
-    .viewerBadge_container__1QSob, 
-    .viewerBadge_link__1QSob, 
-    .st-emotion-cache-1aege4m, 
-    .st-emotion-cache-zq5wrt,
-    div[data-testid="stStatusWidget"],
-    div[class^="viewerBadge"] {
-        display: none !important;
-    }
+    .viewerBadge_container__1QSob, .viewerBadge_link__1QSob, .st-emotion-cache-1aege4m, .st-emotion-cache-zq5wrt,
+    div[data-testid="stStatusWidget"], div[class^="viewerBadge"] { display: none !important; }
 
-    /* 2. PAKSA TEKS TABEL KE TENGAH */
     div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
     div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
-    table, thead, tbody, th, td {
-        text-align: center !important;
-        vertical-align: middle !important;
-    }
-    [data-testid="stDataFrame"] div {
-        text-align: center !important;
-        justify-content: center !important;
-    }
+    table, thead, tbody, th, td { text-align: center !important; vertical-align: middle !important; }
     
-    /* 3. JARAK AMAN & MERAPATKAN EXPANDER */
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 0rem !important;
-    }
-    div[data-testid="stExpander"] {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        margin-bottom: -15px !important; 
-    }
+    .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
+    div[data-testid="stExpander"] { border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }
 
-    /* 4. INDIKATOR WARNA STATUS */
     .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
     .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
     </style>
@@ -200,11 +174,15 @@ else:
                 valid_all, list_data_final = True, []
                 draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
 
+                # --- BAGIAN PERUBAHAN UNIQUE KEY AGAR DATA TIDAK HILANG SAAT ADMIN UPDATE ---
                 for index, row in df_filter.iterrows():
+                    # Menggunakan Kode Barang sebagai Key, bukan Index angka
+                    item_id = str(row[col_kode]).strip()
                     target = int(float(row[col_qty]))
-                    val_q = draft_so.get(f"q_{index}", 0)
-                    val_n = draft_so.get(f"n_{index}", "")
-                    val_t = draft_so.get(f"tog_{index}", False)
+                    
+                    val_q = draft_so.get(f"q_{item_id}", 0)
+                    val_n = draft_so.get(f"n_{item_id}", "")
+                    val_t = draft_so.get(f"tog_{item_id}", False)
                     val_disp = "" if str(val_q) == "0" else str(val_q)
                     
                     status_class = ""
@@ -219,17 +197,21 @@ else:
                     with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
-                        is_note = ct.checkbox("📝", key=f"tog_ui_{index}", value=val_t)
-                        draft_so[f"tog_{index}"] = is_note
-                        u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{index}", value=val_disp, placeholder="0", label_visibility="collapsed")
+                        
+                        is_note = ct.checkbox("📝", key=f"tog_ui_{so_aktif}_{item_id}", value=val_t)
+                        draft_so[f"tog_{item_id}"] = is_note
+                        
+                        u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{so_aktif}_{item_id}", value=val_disp, placeholder="0", label_visibility="collapsed")
                         q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
-                        draft_so[f"q_{index}"] = q_num
+                        draft_so[f"q_{item_id}"] = q_num
+                        
                         if u_input_raw != "" and q_num != target: valid_all = False
                         elif u_input_raw == "": valid_all = False
+                        
                         note_text = ""
                         if is_note:
-                            note_text = st.text_input("Catatan:", key=f"n_ui_{index}", value=val_n)
-                            draft_so[f"n_{index}"] = note_text.strip()
+                            note_text = st.text_input("Catatan:", key=f"n_ui_{so_aktif}_{item_id}", value=val_n)
+                            draft_so[f"n_{item_id}"] = note_text.strip()
                     st.markdown('</div>', unsafe_allow_html=True)
 
                     list_data_final.append({
@@ -237,6 +219,7 @@ else:
                         "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item],
                         "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
+                # --- AKHIR PERUBAHAN ---
 
                 st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
@@ -261,6 +244,7 @@ else:
                 klasemen.index += 1
                 st.subheader("🏆 Klasemen Checker")
                 st.table(klasemen)
+            
             df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
             df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
             def get_info(row):
