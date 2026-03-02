@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import os
 import re
+import json
 from datetime import datetime
 from users import USER_DB
 
@@ -32,7 +33,30 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNGSI DATABASE ---
+# --- FUNGSI DATABASE & DRAFT ---
+def simpan_draft_ke_file(so_aktif, draft_data):
+    """Menyimpan draft ke file JSON agar tidak hilang saat logout/refresh"""
+    if not os.path.exists("drafts"):
+        os.makedirs("drafts")
+    with open(f"drafts/draft_{so_aktif}.json", "w") as f:
+        json.dump(draft_data, f)
+
+def muat_draft_dari_file(so_aktif):
+    """Mengambil kembali data draft jika ada"""
+    file_path = f"drafts/draft_{so_aktif}.json"
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r") as f:
+                return json.load(f)
+        except: return {}
+    return {}
+
+def hapus_file_draft(so_aktif):
+    """Menghapus file draft setelah QC selesai"""
+    file_path = f"drafts/draft_{so_aktif}.json"
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
 def ambil_semua_lock():
     locks = {}
     if os.path.exists("locks.txt"):
@@ -81,6 +105,7 @@ def simpan_so_selesai(no_so):
         f.write(no_so.strip() + "\n")
         f.flush()
     buka_kunci_so(no_so)
+    hapus_file_draft(no_so) # Hapus draft permanen jika sudah selesai
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
@@ -151,7 +176,9 @@ else:
                     else:
                         kunci_so(so_dipilih, st.session_state['user'])
                         st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
-                        if so_dipilih not in st.session_state['qc_drafts']: st.session_state['qc_drafts'][so_dipilih] = {}
+                        # Load draft dari file jika ada
+                        if so_dipilih not in st.session_state['qc_drafts']:
+                            st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih)
                         st.rerun()
 
             elif st.session_state['page'] == "list_barang":
@@ -172,11 +199,10 @@ else:
                 st.divider()
 
                 valid_all, list_data_final = True, []
+                # Pastikan draft terambil dari session atau file
                 draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
 
-                # --- BAGIAN PERUBAHAN UNIQUE KEY AGAR DATA TIDAK HILANG SAAT ADMIN UPDATE ---
                 for index, row in df_filter.iterrows():
-                    # Menggunakan Kode Barang sebagai Key, bukan Index angka
                     item_id = str(row[col_kode]).strip()
                     target = int(float(row[col_qty]))
                     
@@ -199,19 +225,24 @@ else:
                         ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
                         
                         is_note = ct.checkbox("📝", key=f"tog_ui_{so_aktif}_{item_id}", value=val_t)
-                        draft_so[f"tog_{item_id}"] = is_note
                         
                         u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{so_aktif}_{item_id}", value=val_disp, placeholder="0", label_visibility="collapsed")
                         q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
-                        draft_so[f"q_{item_id}"] = q_num
-                        
-                        if u_input_raw != "" and q_num != target: valid_all = False
-                        elif u_input_raw == "": valid_all = False
                         
                         note_text = ""
                         if is_note:
-                            note_text = st.text_input("Catatan:", key=f"n_ui_{so_aktif}_{item_id}", value=val_n)
-                            draft_so[f"n_{item_id}"] = note_text.strip()
+                            note_text = st.text_input("Catatan:", key=f"n_ui_{so_aktif}_{item_id}", value=val_n).strip()
+
+                        # AUTO-SAVE KE FILE SETIAP PERUBAHAN
+                        if draft_so.get(f"q_{item_id}") != q_num or draft_so.get(f"n_{item_id}") != note_text or draft_so.get(f"tog_{item_id}") != is_note:
+                            draft_so[f"q_{item_id}"] = q_num
+                            draft_so[f"n_{item_id}"] = note_text
+                            draft_so[f"tog_{item_id}"] = is_note
+                            simpan_draft_ke_file(so_aktif, draft_so)
+
+                        if u_input_raw != "" and q_num != target: valid_all = False
+                        elif u_input_raw == "": valid_all = False
+                        
                     st.markdown('</div>', unsafe_allow_html=True)
 
                     list_data_final.append({
@@ -219,7 +250,6 @@ else:
                         "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item],
                         "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
                     })
-                # --- AKHIR PERUBAHAN ---
 
                 st.divider()
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
