@@ -35,6 +35,7 @@ st.markdown("""
         border-radius: 10px;
         text-align: center;
         border: 1px solid #e0e0e0;
+        margin-top: 10px;
         margin-bottom: 10px;
     }
 
@@ -166,18 +167,7 @@ else:
                 
                 st.subheader("🎯 Cari Nomor SO")
 
-                # --- DASHBOARD METRICS ---
-                m1, m2, m3 = st.columns(3)
-                m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(list_so_all)}</span></div>', unsafe_allow_html=True)
-                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(list_so_aktif)}</span></div>', unsafe_allow_html=True)
-                m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br><span style="font-size:24px">{len(selesai_list)}</span></div>', unsafe_allow_html=True)
-
-                if current_locks:
-                    with st.expander("👥 Petugas Aktif Saat Ini", expanded=True):
-                        for s, p in current_locks.items():
-                            st.caption(f"🔵 **{p}** sedang mengerjakan **{s}**")
-
-                # --- ADMIN TOOLS (GALANG ONLY) ---
+                # --- 1. ADMIN TOOLS (GALANG ONLY) DI ATAS PENCARIAN ---
                 if is_admin:
                     with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
                         so_adm = st.selectbox("Pilih SO untuk Admin Action:", list_so_aktif, key="so_admin_tool")
@@ -191,7 +181,21 @@ else:
                                 kirim_telegram(f"⚡ *QUICK QC DONE (BY ADMIN)*\n👤 Admin: {st.session_state['user']}\n📄 No SO: {so_adm}")
                                 st.rerun()
                 
+                # --- 2. KOLOM PENCARIAN (UTAMA) ---
                 so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
+                
+                # --- 3. METRIC CARDS DI BAWAH PENCARIAN ---
+                st.divider()
+                m1, m2, m3 = st.columns(3)
+                m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(list_so_all)}</span></div>', unsafe_allow_html=True)
+                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(list_so_aktif)}</span></div>', unsafe_allow_html=True)
+                m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br><span style="font-size:24px">{len(selesai_list)}</span></div>', unsafe_allow_html=True)
+
+                if current_locks:
+                    with st.expander("👥 Petugas Aktif Saat Ini", expanded=True):
+                        for s, p in current_locks.items():
+                            st.caption(f"🔵 **{p}** sedang mengerjakan **{s}**")
+
                 if so_dipilih:
                     if so_dipilih in current_locks and current_locks[so_dipilih] != st.session_state['user']:
                         st.error(f"🚫 Sedang dibuka oleh **{current_locks[so_dipilih]}**")
@@ -210,7 +214,6 @@ else:
                 nama_apotek, tgl_so = df_filter.iloc[0][col_customer], df_filter.iloc[0][col_tgl]
                 df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
                 
-                # --- RINCIAN INFORMASI SO ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 h1, h2 = st.columns(2)
                 h1.markdown(f"🏢 **Apotek:** {nama_apotek}\n\n📅 **Tanggal SO:** {tgl_so}")
@@ -271,7 +274,6 @@ else:
                 st.subheader("🏆 Klasemen Checker")
                 st.table(klasemen)
             
-            # --- STATUS SEMUA NO SO (REKAP HARIAN) ---
             df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
             df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
             def get_info(row):
