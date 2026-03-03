@@ -13,7 +13,7 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS ---
+# --- STYLING CSS (DIPERTJAM UNTUK VISUAL FEEDBACK) ---
 st.markdown("""
     <style>
     footer {visibility: hidden !important;}
@@ -26,23 +26,29 @@ st.markdown("""
     table, thead, tbody, th, td { text-align: center !important; vertical-align: middle !important; }
     
     .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
-    div[data-testid="stExpander"] { border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }
+    
+    /* STYLE DASAR EXPANDER */
+    div[data-testid="stExpander"] { 
+        border: 1px solid #ddd; 
+        border-radius: 8px; 
+        margin-bottom: -15px !important; 
+    }
 
-    .status-ok { background-color: #d4edda !important; border-radius: 8px; margin-bottom: -15px !important; }
-    .status-err { background-color: #f8d7da !important; border-radius: 8px; margin-bottom: -15px !important; }
+    /* INDIKATOR WARNA STATUS */
+    .status-ok { background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }
+    .status-err { background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }
+    .status-pending { background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- FUNGSI DATABASE & DRAFT ---
 def simpan_draft_ke_file(so_aktif, draft_data):
-    """Menyimpan draft ke file JSON agar tidak hilang saat logout/refresh"""
     if not os.path.exists("drafts"):
         os.makedirs("drafts")
     with open(f"drafts/draft_{so_aktif}.json", "w") as f:
         json.dump(draft_data, f)
 
 def muat_draft_dari_file(so_aktif):
-    """Mengambil kembali data draft jika ada"""
     file_path = f"drafts/draft_{so_aktif}.json"
     if os.path.exists(file_path):
         try:
@@ -52,7 +58,6 @@ def muat_draft_dari_file(so_aktif):
     return {}
 
 def hapus_file_draft(so_aktif):
-    """Menghapus file draft setelah QC selesai"""
     file_path = f"drafts/draft_{so_aktif}.json"
     if os.path.exists(file_path):
         os.remove(file_path)
@@ -105,7 +110,7 @@ def simpan_so_selesai(no_so):
         f.write(no_so.strip() + "\n")
         f.flush()
     buka_kunci_so(no_so)
-    hapus_file_draft(no_so) # Hapus draft permanen jika sudah selesai
+    hapus_file_draft(no_so)
     if no_so in st.session_state['qc_drafts']:
         del st.session_state['qc_drafts'][no_so]
 
@@ -176,7 +181,6 @@ else:
                     else:
                         kunci_so(so_dipilih, st.session_state['user'])
                         st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
-                        # Load draft dari file jika ada
                         if so_dipilih not in st.session_state['qc_drafts']:
                             st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih)
                         st.rerun()
@@ -199,7 +203,6 @@ else:
                 st.divider()
 
                 valid_all, list_data_final = True, []
-                # Pastikan draft terambil dari session atau file
                 draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
 
                 for index, row in df_filter.iterrows():
@@ -211,21 +214,22 @@ else:
                     val_t = draft_so.get(f"tog_{item_id}", False)
                     val_disp = "" if str(val_q) == "0" else str(val_q)
                     
-                    status_class = ""
-                    icon_status = ""
+                    # LOGIKA VISUAL FEEDBACK (WARNA)
+                    status_class = "status-pending"
+                    icon_status = " ⏳"
                     if str(val_q) != "0":
                         if int(val_q) == target:
                             status_class = "status-ok"; icon_status = " ✅"
                         else:
                             status_class = "status-err"; icon_status = " ⚠️"
 
+                    # RENDER CONTAINER DENGAN WARNA DINAMIS
                     st.markdown(f'<div class="{status_class}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
                         
                         is_note = ct.checkbox("📝", key=f"tog_ui_{so_aktif}_{item_id}", value=val_t)
-                        
                         u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{so_aktif}_{item_id}", value=val_disp, placeholder="0", label_visibility="collapsed")
                         q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
                         
@@ -239,10 +243,11 @@ else:
                             draft_so[f"n_{item_id}"] = note_text
                             draft_so[f"tog_{item_id}"] = is_note
                             simpan_draft_ke_file(so_aktif, draft_so)
+                            # Memicu rerun untuk update warna di judul expander secara real-time
+                            st.rerun()
 
                         if u_input_raw != "" and q_num != target: valid_all = False
                         elif u_input_raw == "": valid_all = False
-                        
                     st.markdown('</div>', unsafe_allow_html=True)
 
                     list_data_final.append({
