@@ -26,13 +26,10 @@ if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS (DIPERBAIKI AGAR MENU TITIK TIGA MUNCUL) ---
+# --- STYLING CSS (TITIK TIGA MUNCUL, SEMUA WARNA KONTRAST) ---
 st.markdown(f"""
     <style>
-    /* Footer tetap disembunyikan agar rapi */
     footer {{visibility: hidden !important;}}
-    
-    /* Tombol Manage App disembunyikan untuk user umum jika memungkinkan */
     .stAppDeployButton {{ display: none !important; }}
 
     /* Font Size Global */
@@ -40,35 +37,23 @@ st.markdown(f"""
         font-size: {st.session_state['font_size']}px !important;
     }}
 
-    /* Tabel & Dataframe Center */
-    table, thead, tbody, th, td {{ 
-        text-align: center !important; 
-        vertical-align: middle !important; 
-    }}
-
+    table, thead, tbody, th, td {{ text-align: center !important; vertical-align: middle !important; }}
     .block-container {{ padding-top: 2rem !important; padding-bottom: 0rem !important; }}
-    
-    /* Expander Structure */
-    div[data-testid="stExpander"] {{ 
-        border: 1px solid #ddd; 
-        border-radius: 8px; 
-        margin-bottom: -15px !important; 
-    }}
+    div[data-testid="stExpander"] {{ border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }}
 
-    /* Metric Cards */
     .metric-card {{
-        background-color: #f8f9fa;
-        padding: 15px; 
-        border-radius: 10px; 
-        text-align: center; 
-        border: 1px solid #dee2e6; 
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        border: 1px solid #e0e0e0;
+        margin-top: 10px;
         margin-bottom: 10px;
     }}
 
-    /* Status Warna QC */
-    .status-ok {{ background-color: rgba(40, 167, 69, 0.2) !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
-    .status-err {{ background-color: rgba(220, 53, 69, 0.2) !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
-    .status-pending {{ border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
+    .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
+    .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
+    .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -192,26 +177,30 @@ else:
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
                 if is_admin:
-                    with st.expander("🛠️ ADMIN TOOLS", expanded=False):
+                    with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
                         s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
                         if s_adm:
                             ca, cb, cc, cd = st.columns(4)
                             if ca.button("🔓 Unlock"): buka_kunci_so(s_adm); st.rerun()
                             if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
                             if cc.button("🗑️ Hapus"): simpan_so_selesai(s_adm); st.rerun()
-                            if cd.button("⚡ Quick Done"): simpan_so_selesai(s_adm); kirim_telegram(f"⚡ QUICK DONE: {s_adm}"); st.rerun()
+                            if cd.button("⚡ Quick Done"): simpan_so_selesai(s_adm); kirim_telegram(f"⚡ QUICK DONE BY ADMIN: {s_adm}"); st.rerun()
+                
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
+                
                 st.divider()
                 m1, m2, m3 = st.columns(3)
-                m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br>{len(l_all)}</div>', unsafe_allow_html=True)
-                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br>{len(l_aktif)}</div>', unsafe_allow_html=True)
-                m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br>{len(selesai_list)}</div>', unsafe_allow_html=True)
+                m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(l_all)}</span></div>', unsafe_allow_html=True)
+                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(l_aktif)}</span></div>', unsafe_allow_html=True)
+                m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br><span style="font-size:24px">{len(selesai_list)}</span></div>', unsafe_allow_html=True)
+                
                 locks = ambil_semua_lock()
                 if locks:
-                    with st.expander("👥 Petugas Aktif", expanded=True):
+                    with st.expander("👥 Petugas Aktif Saat Ini", expanded=True):
                         for s, p in locks.items(): st.caption(f"🔵 **{p}** sedang mengerjakan **{s}**")
+                
                 if so_dipilih:
-                    if so_dipilih in locks and locks[so_dipilih] != st.session_state['user']: st.error(f"Dikunci {locks[so_dipilih]}")
+                    if so_dipilih in locks and locks[so_dipilih] != st.session_state['user']: st.error(f"🚫 Sedang dibuka oleh {locks[so_dipilih]}")
                     else:
                         kunci_so(so_dipilih, st.session_state['user'])
                         st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
@@ -219,12 +208,20 @@ else:
 
             elif st.session_state['page'] == "list_barang":
                 so_aktif = st.session_state['selected_so']
-                if st.button("⬅️ Kembali"): buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
+                if st.button("⬅️ Kembali ke Pencarian"):
+                    buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
+                
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
                 n_apt, t_so = df_f.iloc[0][c_cust], df_f.iloc[0][c_tgl]
-                st.info(f"📌 **SO:** {so_aktif} | 🏢 **Apotek:** {n_apt}")
-                st.markdown(f"📅 **Tanggal SO:** {t_so} | 💊 **Jenis:** {len(df_f)} | 🔢 **Total Qty:** {int(pd.to_numeric(df_f[c_qty], errors='coerce').sum())}")
+                df_f[c_qty] = pd.to_numeric(df_f[c_qty], errors='coerce').fillna(0)
+                
+                # --- RINCIAN SO (DENGAN IKON & KOTAK INFO) ---
+                st.info(f"📌 **Nomor SO:** {so_aktif}")
+                h1, h2 = st.columns(2)
+                h1.markdown(f"🏢 **Apotek:** {n_apt}\n\n📅 **Tanggal SO:** {t_so}")
+                h2.markdown(f"💊 **Total Jenis:** {len(df_f)} Item\n\n🔢 **Total Qty SO:** {int(df_f[c_qty].sum())} Pcs")
                 st.divider()
+
                 v_all, l_final, draft = True, [], st.session_state['qc_drafts'].get(so_aktif, {})
                 for idx, row in df_f.iterrows():
                     iid = str(row[c_kd]).strip(); target = int(float(row[c_qty]))
@@ -233,40 +230,53 @@ else:
                     if str(vq) != "0":
                         if int(vq) == target: s_clp, icon = "status-ok", " ✅"
                         else: s_clp, icon = "status-err", " ⚠️"
+                    
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
-                    with st.expander(f"💊 {row[c_item]}{icon}"):
-                        ci, ct = st.columns([4, 1.5])
+                    with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
+                        ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[c_kd]} | **Batch:** {row[c_btch]} | **Exp:** {row[c_exp]} | **Qty:** {target}")
                         t_ui = ct.checkbox("📝 Note", key=f"t_{so_aktif}_{iid}", value=vt)
-                        u_in = st.text_input("Qty Input", key=f"q_{so_aktif}_{iid}", value="" if vq==0 else str(vq), placeholder="0")
+                        u_in = st.text_input("Input Fisik", key=f"q_{so_aktif}_{iid}", value="" if vq==0 else str(vq), placeholder="0", label_visibility="collapsed")
                         
-                        # --- FIX URUAN VARIABEL Q_NUM ---
+                        # Definisi q_num sebelum dipakai
                         q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
                         n_ui = st.text_input("Catatan:", key=f"n_{so_aktif}_{iid}", value=vn).strip() if t_ui else ""
                         
                         if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui or draft.get(f"t_{iid}") != t_ui:
                             draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui, f"t_{iid}": t_ui})
                             simpan_draft_ke_file(so_aktif, draft); st.rerun()
+                        
                         if u_in == "" or q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
                     l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": n_apt, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
+
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
-                        simpan_rekap_data(l_final); kirim_telegram(f"✅ QC SELESAI: {so_aktif} ({st.session_state['user']})")
+                        simpan_rekap_data(l_final)
+                        nt = ""
+                        for d in l_final:
+                            if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
+                        kirim_telegram(f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {n_apt}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
                         simpan_so_selesai(so_aktif); st.balloons(); st.rerun()
-                    else: st.error("Lengkapi semua barang!")
+                    else: st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
 
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring QC")
             if os.path.exists("rekap_qc.csv"):
                 rkp = pd.read_csv("rekap_qc.csv")
                 kls = rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
-                kls.columns = ['Nama', 'Total SO', 'Total Item', 'Total Qty']; st.table(kls.sort_values(by='Total Item', ascending=False))
+                kls.columns = ['Nama QC', 'Total SO', 'Total Item', 'Total Qty']
+                st.subheader("🏆 Klasemen Checker")
+                st.table(kls.sort_values(by='Total Item', ascending=False).reset_index(drop=True))
+            
             mon = df_master.groupby([c_so, c_tgl]).agg({c_item: 'count', c_qty: 'sum'}).reset_index()
-            mon.columns = ['No SO', 'Tanggal', 'Jenis', 'Qty']
-            def ck(r):
-                if r['No SO'] in selesai_list: return "Done", rkp[rkp['SO']==r['No SO']]['Petugas'].iloc[0] if 'rkp' in locals() else "-"
+            mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
+            def ck_st(r):
+                if r['No SO'] in selesai_list:
+                    try: return "Done", rkp[rkp['SO'] == r['No SO']]['Petugas'].iloc[0]
+                    except: return "Done", "-"
                 return "Pending", "-"
-            mon[['Status', 'QC']] = mon.apply(lambda x: pd.Series(ck(x)), axis=1)
+            mon[['Status', 'Nama QC']] = mon.apply(lambda x: pd.Series(ck_st(x)), axis=1)
+            st.subheader("📋 Status Semua No SO")
             st.dataframe(mon, use_container_width=True, hide_index=True)
-    else: st.error("File data_so.csv tidak ditemukan.")
+    else: st.error("❌ File data_so.csv tidak ditemukan.")
