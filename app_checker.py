@@ -28,6 +28,16 @@ st.markdown("""
     .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
     div[data-testid="stExpander"] { border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }
 
+    /* Style Kartu Statistik */
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 10px;
+    }
+
     .status-ok { background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }
     .status-err { background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }
     .status-pending { background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }
@@ -150,31 +160,41 @@ else:
 
         if menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                list_so_aktif = sorted([s for s in df_master[col_so].unique() if s not in selesai_list])
-                st.subheader("🎯 Cari Nomor SO")
+                list_so_all = df_master[col_so].unique()
+                list_so_aktif = sorted([s for s in list_so_all if s not in selesai_list])
+                current_locks = ambil_semua_lock()
                 
-                # --- ADMIN TOOLS AREA (GALANG ONLY) ---
+                st.subheader("🎯 Cari Nomor SO")
+
+                # --- DASHBOARD METRICS ---
+                m1, m2, m3 = st.columns(3)
+                m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(list_so_all)}</span></div>', unsafe_allow_html=True)
+                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(list_so_aktif)}</span></div>', unsafe_allow_html=True)
+                m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br><span style="font-size:24px">{len(selesai_list)}</span></div>', unsafe_allow_html=True)
+
+                if current_locks:
+                    with st.expander("👥 Petugas Aktif Saat Ini", expanded=True):
+                        for s, p in current_locks.items():
+                            st.caption(f"🔵 **{p}** sedang mengerjakan **{s}**")
+
+                # --- ADMIN TOOLS (GALANG ONLY) ---
                 if is_admin:
                     with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
                         so_adm = st.selectbox("Pilih SO untuk Admin Action:", list_so_aktif, key="so_admin_tool")
                         if so_adm:
                             c1, c2, c3, c4 = st.columns(4)
-                            if c1.button("🔓 Unlock SO"):
-                                buka_kunci_so(so_adm); st.success(f"{so_adm} Unlocked!"); st.rerun()
-                            if c2.button("♻️ Reset Draft"):
-                                hapus_file_draft(so_adm); st.success(f"Draft {so_adm} Reset!"); st.rerun()
-                            if c3.button("🗑️ Hapus SO"):
-                                simpan_so_selesai(so_adm); st.success(f"{so_adm} Dihapus!"); st.rerun()
+                            if c1.button("🔓 Unlock SO"): buka_kunci_so(so_adm); st.rerun()
+                            if c2.button("♻️ Reset Draft"): hapus_file_draft(so_adm); st.rerun()
+                            if c3.button("🗑️ Hapus SO"): simpan_so_selesai(so_adm); st.rerun()
                             if c4.button("⚡ Quick Done"):
                                 simpan_so_selesai(so_adm)
-                                kirim_telegram(f"⚡ *QUICK QC DONE (BY ADMIN)*\n👤 Admin: {st.session_state['user']}\n📄 No SO: {so_adm}\n📍 Status: Selesai Kilat")
-                                st.success(f"{so_adm} Selesai Kilat!"); st.rerun()
+                                kirim_telegram(f"⚡ *QUICK QC DONE (BY ADMIN)*\n👤 Admin: {st.session_state['user']}\n📄 No SO: {so_adm}")
+                                st.rerun()
                 
                 so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
                 if so_dipilih:
-                    locks = ambil_semua_lock()
                     if so_dipilih in current_locks and current_locks[so_dipilih] != st.session_state['user']:
-                        st.error(f"🚫 Sedang dibuka oleh **{locks[so_dipilih]}**")
+                        st.error(f"🚫 Sedang dibuka oleh **{current_locks[so_dipilih]}**")
                     else:
                         kunci_so(so_dipilih, st.session_state['user'])
                         st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
@@ -190,7 +210,7 @@ else:
                 nama_apotek, tgl_so = df_filter.iloc[0][col_customer], df_filter.iloc[0][col_tgl]
                 df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
                 
-                # --- RINCIAN INFORMASI (KEMBALI DISEDIAKAN) ---
+                # --- RINCIAN INFORMASI SO ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 h1, h2 = st.columns(2)
                 h1.markdown(f"🏢 **Apotek:** {nama_apotek}\n\n📅 **Tanggal SO:** {tgl_so}")
@@ -216,21 +236,16 @@ else:
                     with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
-                        
                         is_note = ct.checkbox("📝", key=f"tog_ui_{so_aktif}_{item_id}", value=val_t)
-                        u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{so_aktif}_{item_id}", value=val_disp, placeholder="0", label_visibility="collapsed")
-                        q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
-                        
-                        note_text = ""
-                        if is_note:
-                            note_text = st.text_input("Catatan:", key=f"n_ui_{so_aktif}_{item_id}", value=val_n).strip()
+                        u_in = st.text_input(f"Qty Input", key=f"q_ui_{so_aktif}_{item_id}", value=val_disp, placeholder="0", label_visibility="collapsed")
+                        q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
+                        note_text = st.text_input("Catatan:", key=f"n_ui_{so_aktif}_{item_id}", value=val_n).strip() if is_note else ""
 
                         if draft_so.get(f"q_{item_id}") != q_num or draft_so.get(f"n_{item_id}") != note_text or draft_so.get(f"tog_{item_id}") != is_note:
                             draft_so.update({f"q_{item_id}": q_num, f"n_{item_id}": note_text, f"tog_{item_id}": is_note})
-                            simpan_draft_ke_file(so_aktif, draft_so)
-                            st.rerun()
+                            simpan_draft_ke_file(so_aktif, draft_so); st.rerun()
 
-                        if u_input_raw == "" or q_num != target: valid_all = False
+                        if u_in == "" or q_num != target: valid_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
                     list_data_final.append({"Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item], "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text})
 
@@ -242,8 +257,7 @@ else:
                         for d in list_data_final:
                             if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
                         kirim_telegram(f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
-                        simpan_so_selesai(so_aktif)
-                        st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.balloons(); st.rerun()
+                        simpan_so_selesai(so_aktif); st.balloons(); st.rerun()
                     else: st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
 
         elif menu == "Dashboard Monitoring":
@@ -257,6 +271,7 @@ else:
                 st.subheader("🏆 Klasemen Checker")
                 st.table(klasemen)
             
+            # --- STATUS SEMUA NO SO (REKAP HARIAN) ---
             df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
             df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
             def get_info(row):
