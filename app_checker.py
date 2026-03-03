@@ -13,28 +13,16 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- STYLING CSS (DIPERTJAM UNTUK VISUAL FEEDBACK) ---
+# --- STYLING CSS ---
 st.markdown("""
     <style>
     footer {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
     .viewerBadge_container__1QSob, .viewerBadge_link__1QSob, .st-emotion-cache-1aege4m, .st-emotion-cache-zq5wrt,
     div[data-testid="stStatusWidget"], div[class^="viewerBadge"] { display: none !important; }
-
-    div[data-testid="stTable"] th, div[data-testid="stTable"] td, 
-    div[data-testid="stDataFrame"] th, div[data-testid="stDataFrame"] td,
     table, thead, tbody, th, td { text-align: center !important; vertical-align: middle !important; }
-    
     .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
-    
-    /* STYLE DASAR EXPANDER */
-    div[data-testid="stExpander"] { 
-        border: 1px solid #ddd; 
-        border-radius: 8px; 
-        margin-bottom: -15px !important; 
-    }
-
-    /* INDIKATOR WARNA STATUS */
+    div[data-testid="stExpander"] { border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }
     .status-ok { background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }
     .status-err { background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }
     .status-pending { background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }
@@ -43,24 +31,20 @@ st.markdown("""
 
 # --- FUNGSI DATABASE & DRAFT ---
 def simpan_draft_ke_file(so_aktif, draft_data):
-    if not os.path.exists("drafts"):
-        os.makedirs("drafts")
-    with open(f"drafts/draft_{so_aktif}.json", "w") as f:
-        json.dump(draft_data, f)
+    if not os.path.exists("drafts"): os.makedirs("drafts")
+    with open(f"drafts/draft_{so_aktif}.json", "w") as f: json.dump(draft_data, f)
 
 def muat_draft_dari_file(so_aktif):
     file_path = f"drafts/draft_{so_aktif}.json"
     if os.path.exists(file_path):
         try:
-            with open(file_path, "r") as f:
-                return json.load(f)
+            with open(file_path, "r") as f: return json.load(f)
         except: return {}
     return {}
 
 def hapus_file_draft(so_aktif):
     file_path = f"drafts/draft_{so_aktif}.json"
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    if os.path.exists(file_path): os.remove(file_path)
 
 def ambil_semua_lock():
     locks = {}
@@ -86,33 +70,30 @@ def buka_kunci_so(no_so):
     if no_so in locks:
         del locks[no_so]
         with open("locks.txt", "w") as f:
-            for s, p in locks.items():
-                f.write(f"{s}|{p}\n")
+            for s, p in locks.items(): f.write(f"{s}|{p}\n")
             f.flush()
 
 def ambil_daftar_selesai():
     if os.path.exists("selesai.txt"):
-        with open("selesai.txt", "r") as f:
-            return [line.strip() for line in f.readlines()]
+        with open("selesai.txt", "r") as f: return [line.strip() for line in f.readlines()]
     return []
 
 def simpan_rekap_data(data_list):
     file_rekap = "rekap_qc.csv"
     df_baru = pd.DataFrame(data_list)
-    if not os.path.exists(file_rekap):
-        df_baru.to_csv(file_rekap, index=False)
-    else:
-        df_baru.to_csv(file_rekap, mode='a', header=False, index=False)
+    if not os.path.exists(file_rekap): df_baru.to_csv(file_rekap, index=False)
+    else: df_baru.to_csv(file_rekap, mode='a', header=False, index=False)
 
 def simpan_so_selesai(no_so):
     path_selesai = "selesai.txt"
-    with open(path_selesai, "a" if os.path.exists(path_selesai) else "w") as f:
-        f.write(no_so.strip() + "\n")
-        f.flush()
+    with open(path_selesai, "a") as f: f.write(no_so.strip() + "\n")
     buka_kunci_so(no_so)
     hapus_file_draft(no_so)
-    if no_so in st.session_state['qc_drafts']:
-        del st.session_state['qc_drafts'][no_so]
+    if no_so in st.session_state['qc_drafts']: del st.session_state['qc_drafts'][no_so]
+
+def kirim_telegram(pesan):
+    try: requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={pesan}")
+    except: pass
 
 # --- INISIALISASI SESSION STATE ---
 if 'auth' not in st.session_state:
@@ -120,50 +101,41 @@ if 'auth' not in st.session_state:
     if "u" in params and params["u"] in USER_DB:
         st.session_state['auth'] = True
         st.session_state['user'] = params["u"].capitalize()
-    else:
-        st.session_state['auth'] = False
+    else: st.session_state['auth'] = False
 
 if 'user' not in st.session_state: st.session_state['user'] = ""
 if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- SISTEM LOGIN ---
+# --- LOGIN ---
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
     u_input = st.text_input("Username").lower().strip()
     p_input = st.text_input("Password", type="password")
     if st.button("Masuk", use_container_width=True):
         if u_input in USER_DB and USER_DB[u_input] == p_input:
-            st.session_state['auth'] = True
-            st.session_state['user'] = u_input.capitalize()
+            st.session_state['auth'], st.session_state['user'] = True, u_input.capitalize()
             st.query_params["u"] = u_input 
             st.rerun()
-        else:
-            st.error("Username atau Password salah!")
+        else: st.error("Username atau Password salah!")
 else:
-    # --- SIDEBAR MENU ---
+    is_admin = st.session_state['user'].lower() == "galang"
     st.sidebar.title(f"👤 {st.session_state['user']}")
-    if st.session_state['user'].lower() == "galang":
-        menu = st.sidebar.radio("Menu Utama", ["Pemeriksaan QC", "Dashboard Monitoring"])
-    else:
-        menu = "Pemeriksaan QC"
-        st.sidebar.info("Mode: Checker Gudang")
-
+    menu = st.sidebar.radio("Menu Utama", ["Pemeriksaan QC", "Dashboard Monitoring"]) if is_admin else "Pemeriksaan QC"
+    
     if st.sidebar.button("Log Out"):
         if st.session_state['selected_so']: buka_kunci_so(st.session_state['selected_so'])
         st.session_state['auth'] = False
         st.query_params.clear()
         st.rerun()
 
-    # --- LOAD DATA ---
     if os.path.exists("data_so.csv"):
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
         col_so, col_customer, col_tgl = 'Nomor # Pesanan Penjualan', 'Pelanggan', 'Tanggal Pesanan Penjualan'
         col_qty, col_item, col_kode = 'Kuantitas', 'Nama Barang', 'Kode #'
         col_batch, col_exp = 'No Seri/Produksi', 'Tgl Kadaluarsa'
-
         df_master[col_so] = df_master[col_so].astype(str).str.strip()
         df_master[[col_so, col_customer, col_tgl]] = df_master[[col_so, col_customer, col_tgl]].ffill()
         df_master = df_master[df_master[col_item].notna()]
@@ -173,123 +145,79 @@ else:
             if st.session_state['page'] == "search":
                 list_so_aktif = sorted([s for s in df_master[col_so].unique() if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
+                
+                # --- ADMIN TOOLS AREA ---
+                if is_admin:
+                    with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
+                        so_adm = st.selectbox("Pilih SO untuk Admin Action:", list_so_aktif, key="so_admin_tool")
+                        if so_adm:
+                            c1, c2, c3, c4 = st.columns(4)
+                            if c1.button("🔓 Unlock SO"):
+                                buka_kunci_so(so_adm); st.success(f"{so_adm} Unlocked!"); st.rerun()
+                            if c2.button("♻️ Reset Draft"):
+                                hapus_file_draft(so_adm); st.success(f"Draft {so_adm} Reset!"); st.rerun()
+                            if c3.button("🗑️ Hapus SO"):
+                                simpan_so_selesai(so_adm); st.success(f"{so_adm} Dihapus!"); st.rerun()
+                            if c4.button("⚡ Quick Done"):
+                                df_q = df_master[df_master[col_so] == so_adm].copy()
+                                simpan_so_selesai(so_adm)
+                                kirim_telegram(f"⚡ *QUICK QC DONE (BY ADMIN)*\n👤 Admin: {st.session_state['user']}\n📄 No SO: {so_adm}\n📍 Status: Selesai Kilat")
+                                st.success(f"{so_adm} Selesai Kilat!"); st.rerun()
+                
                 so_dipilih = st.selectbox("Pilih No SO:", list_so_aktif, index=None, placeholder="Ketik nomor SO...")
                 if so_dipilih:
-                    current_locks = ambil_semua_lock()
-                    if so_dipilih in current_locks and current_locks[so_dipilih] != st.session_state['user']:
-                        st.error(f"🚫 Sedang dibuka oleh **{current_locks[so_dipilih]}**")
+                    locks = ambil_semua_lock()
+                    if so_dipilih in locks and locks[so_dipilih] != st.session_state['user']:
+                        st.error(f"🚫 Sedang dibuka oleh **{locks[so_dipilih]}**")
                     else:
                         kunci_so(so_dipilih, st.session_state['user'])
                         st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
-                        if so_dipilih not in st.session_state['qc_drafts']:
-                            st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih)
+                        st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih)
                         st.rerun()
 
             elif st.session_state['page'] == "list_barang":
                 so_aktif = st.session_state['selected_so']
-                if st.button("⬅️ Kembali ke Pencarian"):
-                    buka_kunci_so(so_aktif)
-                    st.session_state['selected_so'], st.session_state['page'] = None, "search"
-                    st.rerun()
+                if st.button("⬅️ Kembali"):
+                    buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
 
                 df_filter = df_master[df_master[col_so] == so_aktif].copy()
                 nama_apotek, tgl_so = df_filter.iloc[0][col_customer], df_filter.iloc[0][col_tgl]
-                df_filter[col_qty] = pd.to_numeric(df_filter[col_qty], errors='coerce').fillna(0)
+                st.info(f"📌 **SO:** {so_aktif} | **Apotek:** {nama_apotek}")
                 
-                st.info(f"📌 **Nomor SO:** {so_aktif}")
-                h1, h2 = st.columns(2)
-                h1.markdown(f"🏢 **Apotek:** {nama_apotek}\n\n📅 **Tanggal SO:** {tgl_so}")
-                h2.markdown(f"💊 **Total Jenis:** {len(df_filter)} Item\n\n🔢 **Total Qty SO:** {int(df_filter[col_qty].sum())} Pcs")
-                st.divider()
+                valid_all, list_data_final, draft_so = True, [], st.session_state['qc_drafts'].get(so_aktif, {})
 
-                valid_all, list_data_final = True, []
-                draft_so = st.session_state['qc_drafts'].get(so_aktif, {})
-
-                for index, row in df_filter.iterrows():
+                for idx, row in df_filter.iterrows():
                     item_id = str(row[col_kode]).strip()
                     target = int(float(row[col_qty]))
-                    
                     val_q = draft_so.get(f"q_{item_id}", 0)
                     val_n = draft_so.get(f"n_{item_id}", "")
                     val_t = draft_so.get(f"tog_{item_id}", False)
-                    val_disp = "" if str(val_q) == "0" else str(val_q)
                     
-                    # LOGIKA VISUAL FEEDBACK (WARNA)
-                    status_class = "status-pending"
-                    icon_status = " ⏳"
+                    status_class = "status-pending"; icon = " ⏳"
                     if str(val_q) != "0":
-                        if int(val_q) == target:
-                            status_class = "status-ok"; icon_status = " ✅"
-                        else:
-                            status_class = "status-err"; icon_status = " ⚠️"
+                        if int(val_q) == target: status_class, icon = "status-ok", " ✅"
+                        else: status_class, icon = "status-err", " ⚠️"
 
-                    # RENDER CONTAINER DENGAN WARNA DINAMIS
                     st.markdown(f'<div class="{status_class}">', unsafe_allow_html=True)
-                    with st.expander(f"💊 {row[col_item]}{icon_status}", expanded=False):
-                        ci, ct = st.columns([4.5, 1])
-                        ci.write(f"**Code:** {row[col_kode]} | **Batch:** {row[col_batch]} | **Exp:** {row[col_exp]} | **Qty:** {target}")
-                        
-                        is_note = ct.checkbox("📝", key=f"tog_ui_{so_aktif}_{item_id}", value=val_t)
-                        u_input_raw = st.text_input(f"Qty Input", key=f"q_ui_{so_aktif}_{item_id}", value=val_disp, placeholder="0", label_visibility="collapsed")
-                        q_num = int(re.sub("[^0-9]", "", u_input_raw)) if re.sub("[^0-9]", "", u_input_raw) != "" else 0
-                        
-                        note_text = ""
-                        if is_note:
-                            note_text = st.text_input("Catatan:", key=f"n_ui_{so_aktif}_{item_id}", value=val_n).strip()
+                    with st.expander(f"💊 {row[col_item]}{icon}"):
+                        c_in, c_tog = st.columns([4.5, 1])
+                        is_note = c_tog.checkbox("📝", key=f"t_{so_aktif}_{item_id}", value=val_t)
+                        u_in = st.text_input(f"Qty", key=f"q_{so_aktif}_{item_id}", value="" if val_q==0 else str(val_q), placeholder="0", label_visibility="collapsed")
+                        q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
+                        n_txt = st.text_input("Catatan:", key=f"n_{so_aktif}_{item_id}", value=val_n) if is_note else ""
 
-                        # AUTO-SAVE KE FILE SETIAP PERUBAHAN
-                        if draft_so.get(f"q_{item_id}") != q_num or draft_so.get(f"n_{item_id}") != note_text or draft_so.get(f"tog_{item_id}") != is_note:
-                            draft_so[f"q_{item_id}"] = q_num
-                            draft_so[f"n_{item_id}"] = note_text
-                            draft_so[f"tog_{item_id}"] = is_note
-                            simpan_draft_ke_file(so_aktif, draft_so)
-                            # Memicu rerun untuk update warna di judul expander secara real-time
-                            st.rerun()
+                        if draft_so.get(f"q_{item_id}") != q_num or draft_so.get(f"n_{item_id}") != n_txt or draft_so.get(f"tog_{item_id}") != is_note:
+                            draft_so.update({f"q_{item_id}": q_num, f"n_{item_id}": n_txt, f"tog_{item_id}": is_note})
+                            simpan_draft_ke_file(so_aktif, draft_so); st.rerun()
 
-                        if u_input_raw != "" and q_num != target: valid_all = False
-                        elif u_input_raw == "": valid_all = False
+                        if u_in == "" or q_num != target: valid_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
+                    list_data_final.append({"Waktu": datetime.now().strftime("%H:%M:%S"), "Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item], "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_txt})
 
-                    list_data_final.append({
-                        "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Petugas": st.session_state['user'],
-                        "SO": so_aktif, "Apotek": nama_apotek, "Kode": row[col_kode], "Item": row[col_item],
-                        "Batch": row[col_batch], "Exp": row[col_exp], "Qty_SO": target, "Qty_Fisik": q_num, "Note": note_text
-                    })
-
-                st.divider()
-                if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
+                if st.button("✅ SELESAI & KIRIM", use_container_width=True, type="primary"):
                     if valid_all:
                         simpan_rekap_data(list_data_final)
-                        nt = ""
-                        for d in list_data_final:
-                            if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
-                        requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text=✅ **QC SELESAI**\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
-                        simpan_so_selesai(so_aktif)
-                        st.session_state['selected_so'], st.session_state['page'] = None, "search"
-                        st.balloons(); st.rerun()
-                    else: st.error("Gagal! Pastikan semua jumlah sesuai (Warna Hijau).")
-
-        elif menu == "Dashboard Monitoring":
-            st.title("📊 Monitoring & Klasemen QC")
-            if os.path.exists("rekap_qc.csv"):
-                df_rkp = pd.read_csv("rekap_qc.csv")
-                klasemen = df_rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
-                klasemen.columns = ['Nama QC', 'Total SO', 'Total Jenis Barang', 'Total Qty SO']
-                klasemen = klasemen.sort_values(by='Total Jenis Barang', ascending=False).reset_index(drop=True)
-                klasemen.index += 1
-                st.subheader("🏆 Klasemen Checker")
-                st.table(klasemen)
-            
-            df_mon = df_master.groupby([col_so, col_tgl]).agg({col_item: 'count', col_qty: 'sum'}).reset_index()
-            df_mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
-            def get_info(row):
-                if row['No SO'] in selesai_list:
-                    try:
-                        ptgs = df_rkp[df_rkp['SO'] == row['No SO']]['Petugas'].iloc[0]
-                        return "Done QC", ptgs
-                    except: return "Done QC", "-"
-                return "Pending QC", "-"
-            df_mon[['Status', 'Nama QC']] = df_mon.apply(lambda x: pd.Series(get_info(x)), axis=1)
-            st.subheader("📋 Status Semua No SO")
-            st.dataframe(df_mon[['Tanggal SO', 'No SO', 'Nama QC', 'Total Jenis Barang', 'Total Qty SO', 'Status']], use_container_width=True, hide_index=True)
-    else: st.error("File data_so.csv tidak ditemukan.")
+                        txt = f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {nama_apotek}"
+                        kirim_telegram(txt); simpan_so_selesai(so_aktif)
+                        st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.balloons(); st.rerun()
+                    else: st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
