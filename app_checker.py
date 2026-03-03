@@ -18,27 +18,27 @@ if 'font_size' not in st.session_state: st.session_state['font_size'] = 16
 if 'auth' not in st.session_state:
     params = st.query_params
     if "u" in params and params["u"] in USER_DB:
-        st.session_state['auth'] = True
-        st.session_state['user'] = params["u"].capitalize()
-    else:
-        st.session_state['auth'] = False
+        st.session_state['auth'], st.session_state['user'] = True, params["u"].capitalize()
+    else: st.session_state['auth'] = False
 
 if 'user' not in st.session_state: st.session_state['user'] = ""
 if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS ---
+# --- STYLING CSS (HANYA UNTUK STRUKTUR, TANPA TEMA WARNA) ---
 st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
     #MainMenu {{visibility: hidden !important;}}
     div[data-testid="stStatusWidget"], div[class^="viewerBadge"] {{ display: none !important; }}
     
+    /* Font Size Global */
     html, body, [data-testid="stWidgetLabel"] p, .stMarkdown p, .stSelectbox label, label {{
         font-size: {st.session_state['font_size']}px !important;
     }}
 
+    /* Tabel & Dataframe Center */
     table, thead, tbody, th, td {{ 
         text-align: center !important; 
         vertical-align: middle !important; 
@@ -46,28 +46,31 @@ st.markdown(f"""
 
     .block-container {{ padding-top: 2rem !important; padding-bottom: 0rem !important; }}
     
+    /* Expander Structure */
     div[data-testid="stExpander"] {{ 
         border: 1px solid #ddd; 
         border-radius: 8px; 
         margin-bottom: -15px !important; 
     }}
 
+    /* Metric Cards (Visual Ringan) */
     .metric-card {{
-        background-color: rgba(151, 166, 195, 0.1);
+        background-color: #f8f9fa;
         padding: 15px; 
         border-radius: 10px; 
         text-align: center; 
-        border: 1px solid #e0e0e0; 
+        border: 1px solid #dee2e6; 
         margin-bottom: 10px;
     }}
 
-    .status-ok {{ background-color: rgba(40, 167, 69, 0.2) !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
-    .status-err {{ background-color: rgba(220, 53, 69, 0.2) !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
+    /* Status Warna QC (Menggunakan Border agar Teks Standar Tetap Terbaca) */
+    .status-ok {{ border: 2px solid #28a745; background-color: #f4fff4; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
+    .status-err {{ border: 2px solid #dc3545; background-color: #fff4f4; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
     .status-pending {{ border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNGSI DATABASE & LOGIKA ---
+# --- FUNGSI CORE ---
 def update_password_db(u, p):
     USER_DB[u.lower()] = p
     with open("users.py", "w") as f: f.write(f"USER_DB = {json.dumps(USER_DB, indent=4)}")
@@ -120,11 +123,13 @@ def ambil_daftar_selesai():
     return []
 
 def simpan_rekap_data(l):
-    if not os.path.exists("rekap_qc.csv"): pd.DataFrame(l).to_csv("rekap_qc.csv", index=False)
-    else: pd.DataFrame(l).to_csv("rekap_qc.csv", mode='a', header=False, index=False)
+    file_rekap = "rekap_qc.csv"
+    if not os.path.exists(file_rekap): pd.DataFrame(l).to_csv(file_rekap, index=False)
+    else: pd.DataFrame(l).to_csv(file_rekap, mode='a', header=False, index=False)
 
 def simpan_so_selesai(so):
-    with open("selesai.txt", "a" if os.path.exists("selesai.txt") else "w") as f: 
+    path_selesai = "selesai.txt"
+    with open(path_selesai, "a" if os.path.exists(path_selesai) else "w") as f: 
         f.write(so.strip() + "\n"); f.flush()
     buka_kunci_so(so); hapus_file_draft(so)
     if so in st.session_state['qc_drafts']: del st.session_state['qc_drafts'][so]
@@ -178,7 +183,7 @@ else:
             st.subheader("🔑 Ganti Password")
             p1, p2 = st.text_input("Baru", type="password"), st.text_input("Konfirmasi", type="password")
             if st.button("Simpan Password"):
-                if p1 == p2 and p1 != "": update_password_db(st.session_state['user'], p1); st.success("Password Diubah!")
+                if p1 == p2 and p1 != "": update_password_db(st.session_state['user'], p1); st.success("Berhasil!")
                 else: st.error("Password tidak cocok!")
 
         elif menu == "Pemeriksaan QC":
@@ -186,7 +191,6 @@ else:
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
-                
                 if is_admin:
                     with st.expander("🛠️ ADMIN TOOLS", expanded=False):
                         s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
@@ -195,23 +199,17 @@ else:
                             if ca.button("🔓 Unlock"): buka_kunci_so(s_adm); st.rerun()
                             if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
                             if cc.button("🗑️ Hapus"): simpan_so_selesai(s_adm); st.rerun()
-                            if cd.button("⚡ Quick Done"):
-                                simpan_so_selesai(s_adm)
-                                kirim_telegram(f"⚡ QUICK DONE BY ADMIN: {s_adm}"); st.rerun()
-                
+                            if cd.button("⚡ Quick Done"): simpan_so_selesai(s_adm); kirim_telegram(f"⚡ QUICK DONE: {s_adm}"); st.rerun()
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
-                
                 st.divider()
                 m1, m2, m3 = st.columns(3)
                 m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br>{len(l_all)}</div>', unsafe_allow_html=True)
                 m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br>{len(l_aktif)}</div>', unsafe_allow_html=True)
                 m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br>{len(selesai_list)}</div>', unsafe_allow_html=True)
-                
                 locks = ambil_semua_lock()
                 if locks:
                     with st.expander("👥 Petugas Aktif", expanded=True):
                         for s, p in locks.items(): st.caption(f"🔵 **{p}** sedang mengerjakan **{s}**")
-                
                 if so_dipilih:
                     if so_dipilih in locks and locks[so_dipilih] != st.session_state['user']: st.error(f"Dikunci {locks[so_dipilih]}")
                     else:
@@ -222,13 +220,15 @@ else:
             elif st.session_state['page'] == "list_barang":
                 so_aktif = st.session_state['selected_so']
                 if st.button("⬅️ Kembali"): buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
-                
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
                 n_apt, t_so = df_f.iloc[0][c_cust], df_f.iloc[0][c_tgl]
-                st.info(f"📌 **SO:** {so_aktif}")
+                df_f[c_qty] = pd.to_numeric(df_f[c_qty], errors='coerce').fillna(0)
+                
+                # RINCIAN INFORMASI (Latar Biru Muda Standar)
+                st.info(f"📌 **Nomor SO:** {so_aktif}")
                 h1, h2 = st.columns(2)
                 h1.markdown(f"🏢 **Apotek:** {n_apt}\n\n📅 **Tanggal SO:** {t_so}")
-                h2.markdown(f"💊 **Total Jenis:** {len(df_f)} Item\n\n🔢 **Total Qty SO:** {int(pd.to_numeric(df_f[c_qty], errors='coerce').sum())} Pcs")
+                h2.markdown(f"💊 **Total Jenis:** {len(df_f)} Item\n\n🔢 **Total Qty SO:** {int(df_f[c_qty].sum())} Pcs")
                 st.divider()
 
                 v_all, l_final, draft = True, [], st.session_state['qc_drafts'].get(so_aktif, {})
@@ -253,31 +253,28 @@ else:
                             simpan_draft_ke_file(so_aktif, draft); st.rerun()
                         if u_in == "" or q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
-                    l_final.append({"Waktu": datetime.now().strftime("%H:%M:%S"), "Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": n_apt, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
+                    l_final.append({"Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": n_apt, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
 
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
                         simpan_rekap_data(l_final); kirim_telegram(f"✅ QC SELESAI: {so_aktif} ({st.session_state['user']})")
                         simpan_so_selesai(so_aktif); st.balloons(); st.rerun()
-                    else: st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
+                    else: st.error("Lengkapi semua barang!")
 
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring QC")
             if os.path.exists("rekap_qc.csv"):
                 rkp = pd.read_csv("rekap_qc.csv")
                 kls = rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
-                kls.columns = ['Nama', 'Total SO', 'Total Item', 'Total Qty']
-                st.subheader("🏆 Klasemen Checker")
+                kls.columns = ['Nama QC', 'Total SO', 'Total Item', 'Total Qty']
                 st.table(kls.sort_values(by='Total Item', ascending=False).reset_index(drop=True))
-            
             mon = df_master.groupby([c_so, c_tgl]).agg({c_item: 'count', c_qty: 'sum'}).reset_index()
             mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
-            def ck(r):
+            def ck_st(r):
                 if r['No SO'] in selesai_list:
                     try: return "Done", rkp[rkp['SO'] == r['No SO']]['Petugas'].iloc[0]
                     except: return "Done", "-"
                 return "Pending", "-"
-            mon[['Status', 'Nama QC']] = mon.apply(lambda x: pd.Series(ck(x)), axis=1)
-            st.subheader("📋 Status Semua No SO")
+            mon[['Status', 'Nama QC']] = mon.apply(lambda x: pd.Series(ck_st(x)), axis=1)
             st.dataframe(mon, use_container_width=True, hide_index=True)
     else: st.error("data_so.csv tidak ditemukan.")
