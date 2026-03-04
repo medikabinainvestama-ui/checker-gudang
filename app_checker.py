@@ -26,7 +26,7 @@ if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS (TITIK TIGA MUNCUL, SEMUA WARNA KONTRAST) ---
+# --- STYLING CSS ---
 st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
@@ -54,6 +54,24 @@ st.markdown(f"""
     .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
     .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
     .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
+    
+    /* Style untuk Header Profil di Halaman Utama */
+    .user-header {{
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        background-color: #f8f9fa;
+        padding: 10px 15px;
+        border-radius: 12px;
+        border: 1px solid #eee;
+        margin-bottom: 20px;
+    }}
+    .user-header img {{
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        object-fit: cover;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -173,9 +191,20 @@ else:
 
         elif menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
+                # --- HEADER PROFIL DI ATAS PENCARIAN ---
+                user_photo = get_user_photo(st.session_state['user'])
+                col_p1, col_p2 = st.columns([1, 6])
+                with col_p1:
+                    if user_photo: st.image(user_photo, width=60)
+                    else: st.markdown("👤", help="Belum ada foto profil")
+                with col_p2:
+                    st.markdown(f"Selamat Bekerja,\n### {st.session_state['user']}")
+
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
+                
                 st.subheader("🎯 Cari Nomor SO")
+                
                 if is_admin:
                     with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
                         s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
@@ -215,7 +244,6 @@ else:
                 n_apt, t_so = df_f.iloc[0][c_cust], df_f.iloc[0][c_tgl]
                 df_f[c_qty] = pd.to_numeric(df_f[c_qty], errors='coerce').fillna(0)
                 
-                # --- RINCIAN SO (DENGAN IKON & KOTAK INFO) ---
                 st.info(f"📌 **Nomor SO:** {so_aktif}")
                 h1, h2 = st.columns(2)
                 h1.markdown(f"🏢 **Apotek:** {n_apt}\n\n📅 **Tanggal SO:** {t_so}")
@@ -238,7 +266,6 @@ else:
                         t_ui = ct.checkbox("📝 Note", key=f"t_{so_aktif}_{iid}", value=vt)
                         u_in = st.text_input("Input Fisik", key=f"q_{so_aktif}_{iid}", value="" if vq==0 else str(vq), placeholder="0", label_visibility="collapsed")
                         
-                        # Definisi q_num sebelum dipakai
                         q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
                         n_ui = st.text_input("Catatan:", key=f"n_{so_aktif}_{iid}", value=vn).strip() if t_ui else ""
                         
