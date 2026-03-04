@@ -120,8 +120,11 @@ def simpan_so_selesai(so):
     if so in st.session_state['qc_drafts']: del st.session_state['qc_drafts'][so]
 
 def kirim_telegram(m):
-    try: requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={m}")
-    except: pass
+    try: 
+        # Menggunakan timeout agar aplikasi tidak hang jika koneksi Telegram lambat
+        requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={m}", timeout=5)
+    except: 
+        pass
 
 # --- LOGIN ---
 if not st.session_state['auth']:
@@ -173,7 +176,6 @@ else:
 
         elif menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                # --- HEADER PROFIL SEJAJAR (FOTO DI SAMPING NAMA) ---
                 user_photo = get_user_photo(st.session_state['user'])
                 col_p1, col_p2 = st.columns([1, 5])
                 with col_p1:
@@ -193,7 +195,10 @@ else:
                             if ca.button("🔓 Unlock"): buka_kunci_so(s_adm); st.rerun()
                             if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
                             if cc.button("🗑️ Hapus"): simpan_so_selesai(s_adm); st.rerun()
-                            if cd.button("⚡ Quick Done"): simpan_so_selesai(s_adm); kirim_telegram(f"⚡ QUICK DONE BY ADMIN: {s_adm}"); st.rerun()
+                            if cd.button("⚡ Quick Done"): 
+                                simpan_so_selesai(s_adm)
+                                kirim_telegram(f"⚡ QUICK DONE BY ADMIN: {s_adm}")
+                                st.rerun()
                 
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
                 
@@ -257,15 +262,28 @@ else:
                     st.markdown('</div>', unsafe_allow_html=True)
                     l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": n_apt, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
 
+                # --- PERBAIKAN LOGIKA PADA TOMBOL SELESAI ---
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
+                        # 1. Simpan Data Rekap Terlebih Dahulu
                         simpan_rekap_data(l_final)
+                        
+                        # 2. Tandai SO Sebagai Selesai (Buka Lock & Hapus Draft)
+                        simpan_so_selesai(so_aktif)
+                        
+                        # 3. Kirim Telegram
                         nt = ""
                         for d in l_final:
                             if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
                         kirim_telegram(f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {n_apt}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
-                        simpan_so_selesai(so_aktif); st.balloons(); st.rerun()
-                    else: st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
+                        
+                        # 4. Update Status Halaman Sebelum Rerun
+                        st.session_state['selected_so'] = None
+                        st.session_state['page'] = "search"
+                        st.balloons()
+                        st.rerun()
+                    else: 
+                        st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
 
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring QC")
