@@ -54,24 +54,6 @@ st.markdown(f"""
     .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
     .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
     .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
-    
-    /* Style untuk Header Profil di Halaman Utama */
-    .user-header {{
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        background-color: #f8f9fa;
-        padding: 10px 15px;
-        border-radius: 12px;
-        border: 1px solid #eee;
-        margin-bottom: 20px;
-    }}
-    .user-header img {{
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        object-fit: cover;
-    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -191,20 +173,18 @@ else:
 
         elif menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                # --- HEADER PROFIL DI ATAS PENCARIAN ---
+                # --- HEADER PROFIL SEJAJAR (FOTO DI SAMPING NAMA) ---
                 user_photo = get_user_photo(st.session_state['user'])
-                col_p1, col_p2 = st.columns([1, 6])
+                col_p1, col_p2 = st.columns([1, 5])
                 with col_p1:
-                    if user_photo: st.image(user_photo, width=60)
-                    else: st.markdown("👤", help="Belum ada foto profil")
+                    if user_photo: st.image(user_photo, width=80)
+                    else: st.markdown("<h1 style='margin:0;'>👤</h1>", unsafe_allow_html=True)
                 with col_p2:
-                    st.markdown(f"Selamat Bekerja,\n### {st.session_state['user']}")
+                    st.markdown(f"<div style='padding-top: 10px;'><p style='margin:0; color: gray;'>Selamat Bekerja,</p><h2 style='margin:0;'>{st.session_state['user']}</h2></div>", unsafe_allow_html=True)
 
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
-                
                 st.subheader("🎯 Cari Nomor SO")
-                
                 if is_admin:
                     with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
                         s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
@@ -220,7 +200,7 @@ else:
                 st.divider()
                 m1, m2, m3 = st.columns(3)
                 m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(l_all)}</span></div>', unsafe_allow_html=True)
-                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(l_aktif)}</span></div>', unsafe_allow_html=True)
+                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(list(l_aktif))}</span></div>', unsafe_allow_html=True)
                 m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br><span style="font-size:24px">{len(selesai_list)}</span></div>', unsafe_allow_html=True)
                 
                 locks = ambil_semua_lock()
