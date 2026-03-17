@@ -68,8 +68,11 @@ def simpan_draft_ke_file(so, data):
 def muat_draft_dari_file(so):
     path = f"drafts/draft_{so}.json"
     if os.path.exists(path):
-        try: with open(path, "r") as f: return json.load(f)
-        except: return {}
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
 def hapus_file_draft(so):
@@ -191,7 +194,7 @@ else:
                 
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
                 
-                # --- RINCIAN SO (SESUAI PERMINTAAN ANDA) ---
+                # --- RINCIAN SO (SUMMARY) ---
                 nama_apotek = df_f.iloc[0][c_cust]
                 tgl_so = df_f.iloc[0][c_tgl]
                 jml_jenis = len(df_f)
