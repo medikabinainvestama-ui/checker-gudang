@@ -1,8 +1,8 @@
 streamlit
 pandas
 requests
-ultralytics
+ultralytics==8.1.0
 Pillow
 openpyxl
-streamlit-webrtc
+streamlit-webrtc==0.47.1
 av
