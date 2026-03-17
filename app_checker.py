@@ -19,7 +19,10 @@ st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 @st.cache_resource
 def load_ai_model():
     if os.path.exists("best.pt"):
-        return YOLO("best.pt")
+        try:
+            return YOLO("best.pt")
+        except:
+            return None
     return None
 
 model_ai = load_ai_model()
@@ -125,7 +128,7 @@ def kirim_telegram(m):
 # --- FUNGSI PREDIKSI AI ---
 def prediksi_barang(img_buffer, kode_target):
     if model_ai is None:
-        return None, 0, "Model AI (best.pt) tidak ditemukan"
+        return None, 0, "Model AI tidak ditemukan"
     img = Image.open(img_buffer)
     img = ImageOps.exif_transpose(img)
     results = model_ai.predict(img)
@@ -200,7 +203,6 @@ else:
                     with st.expander(f"💊 {row[c_item]}", expanded=False):
                         st.markdown('<div class="ai-box">', unsafe_allow_html=True)
                         st.write("🤖 **AI Visual Scan**")
-                        # camera_input untuk capture gambar
                         img_file = st.camera_input("Ambil Foto", key=f"cam_{iid}")
                         if img_file:
                             match, conf, d_code = prediksi_barang(img_file, iid)
