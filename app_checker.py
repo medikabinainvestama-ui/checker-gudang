@@ -6,8 +6,8 @@ import re
 import json
 from datetime import datetime
 from users import USER_DB
-from ultralytics import YOLO  # Library AI
-from PIL import Image, ImageOps # Pengolah Gambar
+from ultralytics import YOLO 
+from PIL import Image, ImageOps
 
 # --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
@@ -42,37 +42,20 @@ st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
     .stAppDeployButton {{ display: none !important; }}
-
-    /* Font Size Global */
     html, body, [data-testid="stWidgetLabel"] p, .stMarkdown p, .stSelectbox label, label {{
         font-size: {st.session_state['font_size']}px !important;
     }}
-
     table, thead, tbody, th, td {{ text-align: center !important; vertical-align: middle !important; }}
     .block-container {{ padding-top: 2rem !important; padding-bottom: 0rem !important; }}
     div[data-testid="stExpander"] {{ border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }}
-
     .metric-card {{
-        background-color: #f0f2f6;
-        padding: 15px;
-        border-radius: 10px;
-        text-align: center;
-        border: 1px solid #e0e0e0;
-        margin-top: 10px;
-        margin-bottom: 10px;
+        background-color: #f0f2f6; padding: 15px; border-radius: 10px;
+        text-align: center; border: 1px solid #e0e0e0; margin: 10px 0;
     }}
-
     .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
     .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
     .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
-    
-    .ai-box {{
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        border: 1px dashed #333;
-        background-color: #f9f9f9;
-    }}
+    .ai-box {{ padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px dashed #333; background-color: #f9f9f9; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -148,20 +131,14 @@ def kirim_telegram(m):
 def prediksi_barang(img_buffer, kode_target):
     if model_ai is None:
         return None, 0, "Model AI (best.pt) tidak ditemukan"
-    
-    # Perbaiki orientasi gambar otomatis (EXIF data) sebelum diprediksi
     img = Image.open(img_buffer)
     img = ImageOps.exif_transpose(img)
-    
     results = model_ai.predict(img)
-    
     top_result = results[0].probs
     class_index = top_result.top1
     confidence = top_result.top1conf.item()
     detected_code = results[0].names[class_index]
-    
     match = str(detected_code) == str(kode_target)
-    
     return match, confidence, detected_code
 
 # --- LOGIN ---
@@ -239,7 +216,6 @@ else:
                                 st.rerun()
                 
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
-                
                 st.divider()
                 m1, m2, m3 = st.columns(3)
                 m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(l_all)}</span></div>', unsafe_allow_html=True)
@@ -284,32 +260,39 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
-                        # --- FITUR AI SCAN ---
+                        # --- PERBAIKAN FITUR AI SCAN (KUNCI KAMERA BELAKANG) ---
                         with st.container():
                             st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
                             
-                            # Logika Reset untuk memancing kamera belakang
-                            if st.button("🔄 Aktifkan Kamera Belakang", key=f"reset_{iid}"):
+                            # Jika kamera stuck atau mau ganti kamera, refresh key
+                            if st.button("🔄 Gunakan Kamera Belakang (Utama)", key=f"btn_cam_{iid}"):
                                 st.session_state[f"cam_key_{iid}"] = datetime.now().strftime("%H%M%S")
                                 st.rerun()
 
+                            # Default key agar stabil
                             if f"cam_key_{iid}" not in st.session_state:
-                                st.session_state[f"cam_key_{iid}"] = "initial"
+                                st.session_state[f"cam_key_{iid}"] = "init"
 
                             c_ai1, c_ai2 = st.columns([2, 3])
                             with c_ai1:
-                                cam_img = st.camera_input("Scan", key=f"cam_{st.session_state[f'cam_key_{iid}']}_{iid}", label_visibility="collapsed")
+                                # Menggunakan key dinamis untuk memicu ulang inisialisasi browser
+                                # Parameter label sengaja dibedakan per barang agar tidak bentrok
+                                cam_img = st.camera_input(
+                                    f"Scan {row[c_item]}", 
+                                    key=f"cam_input_{st.session_state[f'cam_key_{iid}']}_{iid}",
+                                    label_visibility="collapsed"
+                                )
                             with c_ai2:
                                 if cam_img:
                                     is_match, conf, d_code = prediksi_barang(cam_img, iid)
                                     if is_match is True:
-                                        st.success(f"✅ AI: SESUAI ({int(conf*100)}%)")
+                                        st.success(f"✅ SESUAI ({int(conf*100)}%)")
                                     elif is_match is False:
-                                        st.error(f"❌ AI: SALAH! (Terdeteksi: {d_code})")
+                                        st.error(f"❌ SALAH! (Detected: {d_code})")
                                     else:
                                         st.warning(f"⚠️ {d_code}")
                                 else:
-                                    st.caption("Arahkan kamera belakang ke kemasan barang.")
+                                    st.caption("Gunakan Kamera Utama (Belakang) untuk akurasi.")
                             st.markdown('</div>', unsafe_allow_html=True)
 
                         ci, ct = st.columns([4.5, 1])
@@ -336,11 +319,9 @@ else:
                         for d in l_final:
                             if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
                         kirim_telegram(f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {n_apt}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
-                        
                         st.session_state['selected_so'] = None
                         st.session_state['page'] = "search"
-                        st.balloons()
-                        st.rerun()
+                        st.balloons(); st.rerun()
                     else: 
                         st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
 
@@ -352,7 +333,6 @@ else:
                 kls.columns = ['Nama QC', 'Total SO', 'Total Item', 'Total Qty']
                 st.subheader("🏆 Klasemen Checker")
                 st.table(kls.sort_values(by='Total Item', ascending=False).reset_index(drop=True))
-            
             mon = df_master.groupby([c_so, c_tgl]).agg({c_item: 'count', c_qty: 'sum'}).reset_index()
             mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
             def ck_st(r):
