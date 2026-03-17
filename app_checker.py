@@ -347,4 +347,4 @@ else:
             st.subheader("📋 Status Semua No SO")
             st.dataframe(mon, use_container_width=True, hide_index=True)
     else: st.error("❌ File data_so.csv tidak ditemukan.")
-        
+    
