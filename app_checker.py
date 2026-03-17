@@ -6,8 +6,8 @@ import re
 import json
 from datetime import datetime
 from users import USER_DB
-from ultralytics import YOLO  # Import Library AI
-from PIL import Image, ImageOps # Untuk memproses gambar dan memperbaiki orientasi
+from ultralytics import YOLO  # Library AI
+from PIL import Image, ImageOps # Pengolah Gambar
 
 # --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
@@ -284,20 +284,28 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
-                        # --- FITUR AI SCAN (KUNCI KAMERA BELAKANG) ---
+                        # --- FITUR AI SCAN ---
                         with st.container():
                             st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
+                            
+                            # Logika Reset untuk memancing kamera belakang
+                            if st.button("🔄 Aktifkan Kamera Belakang", key=f"reset_{iid}"):
+                                st.session_state[f"cam_key_{iid}"] = datetime.now().strftime("%H%M%S")
+                                st.rerun()
+
+                            if f"cam_key_{iid}" not in st.session_state:
+                                st.session_state[f"cam_key_{iid}"] = "initial"
+
                             c_ai1, c_ai2 = st.columns([2, 3])
                             with c_ai1:
-                                # Menggunakan label_visibility="collapsed" dan memastikan label teks unik
-                                cam_img = st.camera_input("Scan", key=f"cam_{so_aktif}_{iid}", label_visibility="collapsed")
+                                cam_img = st.camera_input("Scan", key=f"cam_{st.session_state[f'cam_key_{iid}']}_{iid}", label_visibility="collapsed")
                             with c_ai2:
                                 if cam_img:
                                     is_match, conf, d_code = prediksi_barang(cam_img, iid)
                                     if is_match is True:
                                         st.success(f"✅ AI: SESUAI ({int(conf*100)}%)")
                                     elif is_match is False:
-                                        st.error(f"❌ AI: SALAH BARANG! (Terdeteksi: {d_code})")
+                                        st.error(f"❌ AI: SALAH! (Terdeteksi: {d_code})")
                                     else:
                                         st.warning(f"⚠️ {d_code}")
                                 else:
