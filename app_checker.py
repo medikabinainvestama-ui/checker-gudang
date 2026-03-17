@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from users import USER_DB
 from ultralytics import YOLO  # Import Library AI
-from PIL import Image         # Untuk memproses gambar
+from PIL import Image, ImageOps # Untuk memproses gambar dan memperbaiki orientasi
 
 # --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
@@ -15,7 +15,7 @@ CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
-# --- LOAD MODEL AI (BARU) ---
+# --- LOAD MODEL AI ---
 @st.cache_resource
 def load_ai_model():
     if os.path.exists("best.pt"):
@@ -144,21 +144,22 @@ def kirim_telegram(m):
     except: 
         pass
 
-# --- FUNGSI PREDIKSI AI (BARU) ---
+# --- FUNGSI PREDIKSI AI ---
 def prediksi_barang(img_buffer, kode_target):
     if model_ai is None:
         return None, 0, "Model AI (best.pt) tidak ditemukan"
     
+    # Perbaiki orientasi gambar otomatis (EXIF data) sebelum diprediksi
     img = Image.open(img_buffer)
+    img = ImageOps.exif_transpose(img)
+    
     results = model_ai.predict(img)
     
-    # Ambil hasil klasifikasi tertinggi
     top_result = results[0].probs
     class_index = top_result.top1
     confidence = top_result.top1conf.item()
     detected_code = results[0].names[class_index]
     
-    # Cek apakah kode barang yang dideteksi sesuai dengan kode barang target
     match = str(detected_code) == str(kode_target)
     
     return match, confidence, detected_code
@@ -283,24 +284,24 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
-                        # --- FITUR AI SCAN (ASLI) ---
+                        # --- FITUR AI SCAN (KUNCI KAMERA BELAKANG) ---
                         with st.container():
                             st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
                             c_ai1, c_ai2 = st.columns([2, 3])
                             with c_ai1:
-                                cam_img = st.camera_input("Scan Barang", key=f"cam_{so_aktif}_{iid}", label_visibility="collapsed")
+                                # Menggunakan label_visibility="collapsed" dan memastikan label teks unik
+                                cam_img = st.camera_input("Scan", key=f"cam_{so_aktif}_{iid}", label_visibility="collapsed")
                             with c_ai2:
                                 if cam_img:
-                                    # Panggil fungsi prediksi asli
                                     is_match, conf, d_code = prediksi_barang(cam_img, iid)
                                     if is_match is True:
                                         st.success(f"✅ AI: SESUAI ({int(conf*100)}%)")
                                     elif is_match is False:
                                         st.error(f"❌ AI: SALAH BARANG! (Terdeteksi: {d_code})")
                                     else:
-                                        st.warning(f"⚠️ {d_code}") # Error model tidak ada
+                                        st.warning(f"⚠️ {d_code}")
                                 else:
-                                    st.caption("Verifikasi kemasan dengan kamera.")
+                                    st.caption("Arahkan kamera belakang ke kemasan barang.")
                             st.markdown('</div>', unsafe_allow_html=True)
 
                         ci, ct = st.columns([4.5, 1])
@@ -319,7 +320,6 @@ else:
                     st.markdown('</div>', unsafe_allow_html=True)
                     l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": n_apt, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
 
-                # --- TOMBOL SELESAI ---
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
                         simpan_rekap_data(l_final)
