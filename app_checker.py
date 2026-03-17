@@ -38,7 +38,7 @@ if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS (SAMA PERSIS DENGAN KODE AWAL ANDA) ---
+# --- STYLING CSS ---
 st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
@@ -68,8 +68,7 @@ def simpan_draft_ke_file(so, data):
 def muat_draft_dari_file(so):
     path = f"drafts/draft_{so}.json"
     if os.path.exists(path):
-        try:
-            with open(path, "r") as f: return json.load(f)
+        try: with open(path, "r") as f: return json.load(f)
         except: return {}
     return {}
 
@@ -161,7 +160,6 @@ else:
 
         if menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                # --- DASHBOARD METRIC AWAL ---
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
@@ -175,7 +173,6 @@ else:
                             if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
 
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
-                
                 st.divider()
                 m1, m2, m3 = st.columns(3)
                 m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br>{len(l_all)}</div>', unsafe_allow_html=True)
@@ -188,19 +185,26 @@ else:
                     st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih); st.rerun()
 
             elif st.session_state['page'] == "list_barang":
-                # --- RINCIAN SO (TABEL & LIST BARANG ASLI) ---
                 so_aktif = st.session_state['selected_so']
                 if st.button("⬅️ Kembali ke Pencarian"):
                     buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
                 
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
-                n_apt = df_f.iloc[0][c_cust]
-                st.info(f"📌 **Nomor SO:** {so_aktif} | 🏢 **Apotek:** {n_apt}")
                 
-                # --- TABEL RINCIAN SO (YANG TADI HILANG) ---
-                with st.expander("📊 Lihat Tabel Rincian SO", expanded=True):
-                    st.table(df_f[[c_kd, c_item, c_qty]])
+                # --- RINCIAN SO (SESUAI PERMINTAAN ANDA) ---
+                nama_apotek = df_f.iloc[0][c_cust]
+                tgl_so = df_f.iloc[0][c_tgl]
+                jml_jenis = len(df_f)
+                jml_qty = int(pd.to_numeric(df_f[c_qty]).sum())
 
+                st.markdown(f"""
+                ### 📋 Rincian SO: {so_aktif}
+                * 🏢 **Nama Apotek:** {nama_apotek}
+                * 📅 **Tanggal SO:** {tgl_so}
+                * 💊 **Jumlah Jenis Barang:** {jml_jenis} Item
+                * 🔢 **Jumlah Qty Total:** {jml_qty} Pcs
+                """, unsafe_allow_html=True)
+                
                 st.divider()
 
                 v_all, l_final, draft = True, [], st.session_state['qc_drafts'].get(so_aktif, {})
@@ -211,10 +215,8 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}", expanded=False):
-                        # --- SOLUSI KAMERA TERAKHIR ---
                         st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
-                        # Gunakan file_uploader: Di HP Checker akan otomatis diminta "Kamera"
-                        cam_img = st.file_uploader(f"Scan Barang {iid}", key=f"cam_{iid}", label_visibility="collapsed")
+                        cam_img = st.file_uploader(f"Scan {iid}", key=f"cam_{iid}", label_visibility="collapsed")
                         if cam_img:
                             match, conf, d_code = prediksi_barang(cam_img, iid)
                             if match is True: st.success(f"✅ SESUAI ({int(conf*100)}%)")
@@ -224,7 +226,7 @@ else:
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[c_kd]} | **Qty SO:** {target}")
                         u_in = st.text_input("Input Fisik", key=f"q_{iid}", value="" if vq==0 else str(vq), placeholder="0")
-                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn, placeholder="Tambahkan catatan jika perlu")
+                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn, placeholder="Note...")
                         
                         q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
                         if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui:
@@ -232,7 +234,7 @@ else:
                             simpan_draft_ke_file(so_aktif, draft); st.rerun()
                         if q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
-                    l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Item": row[c_item], "Qty_Fisik": q_num, "Note": n_ui})
+                    l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
 
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
