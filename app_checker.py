@@ -19,12 +19,14 @@ st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 @st.cache_resource
 def load_ai_model():
     if os.path.exists("best.pt"):
-        return YOLO("best.pt")
+        try:
+            return YOLO("best.pt")
+        except: return None
     return None
 
 model_ai = load_ai_model()
 
-# --- INISIALISASI SESSION STATE ---
+# --- INISIALISASI SESSION STATE (FITUR ASLI ANDA) ---
 if 'font_size' not in st.session_state: st.session_state['font_size'] = 16
 if 'auth' not in st.session_state:
     params = st.query_params
@@ -37,7 +39,7 @@ if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS (KEMBALI KE DESAIN ASLI) ---
+# --- STYLING CSS (PERSIS KODE AWAL ANDA) ---
 st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
@@ -59,7 +61,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNGSI CORE ---
+# --- FUNGSI CORE (AUTOSAVE, LOCK, TELEGRAM) ---
 def update_password_db(u, p):
     USER_DB[u.lower()] = p
     with open("users.py", "w") as f: f.write(f"USER_DB = {json.dumps(USER_DB, indent=4)}")
@@ -122,12 +124,9 @@ def simpan_so_selesai(so):
     if so in st.session_state['qc_drafts']: del st.session_state['qc_drafts'][so]
 
 def kirim_telegram(m):
-    try: 
-        requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={m}", timeout=5)
-    except: 
-        pass
+    try: requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={m}", timeout=5)
+    except: pass
 
-# --- FUNGSI PREDIKSI AI ---
 def prediksi_barang(img_buffer, kode_target):
     if model_ai is None: return None, 0, "Model AI tidak ditemukan"
     img = Image.open(img_buffer)
@@ -140,7 +139,7 @@ def prediksi_barang(img_buffer, kode_target):
     match = str(detected_code) == str(kode_target)
     return match, confidence, detected_code
 
-# --- HALAMAN LOGIN ---
+# --- LOGIN ---
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
     u_in = st.text_input("Username").lower().strip()
@@ -151,7 +150,6 @@ if not st.session_state['auth']:
             st.query_params["u"] = u_in; st.rerun()
         else: st.error("Username atau Password salah!")
 else:
-    # --- MENU UTAMA ---
     is_admin = st.session_state['user'].lower() == "galang"
     with st.sidebar:
         photo = get_user_photo(st.session_state['user'])
@@ -185,7 +183,7 @@ else:
 
         elif menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                # --- TAMPILAN DASHBOARD SEARCH ---
+                # --- DASHBOARD SEARCH (FITUR ASLI ANDA) ---
                 user_photo = get_user_photo(st.session_state['user'])
                 col_p1, col_p2 = st.columns([1, 5])
                 with col_p1:
@@ -197,6 +195,16 @@ else:
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
+                
+                if is_admin:
+                    with st.expander("🛠️ ADMIN TOOLS (Galang Only)"):
+                        s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
+                        if s_adm:
+                            ca, cb, cc = st.columns(3)
+                            if ca.button("🔓 Unlock"): buka_kunci_so(s_adm); st.rerun()
+                            if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
+                            if cc.button("🗑️ Hapus"): simpan_so_selesai(s_adm); st.rerun()
+
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
                 
                 st.divider()
@@ -214,7 +222,7 @@ else:
                         st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih); st.rerun()
 
             elif st.session_state['page'] == "list_barang":
-                # --- TAMPILAN TAB CHECKER (DETAIL BARANG) ---
+                # --- TAB CHECKER (FITUR ASLI ANDA) ---
                 so_aktif = st.session_state['selected_so']
                 if st.button("⬅️ Kembali ke Pencarian"):
                     buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
@@ -232,21 +240,24 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}", expanded=False):
-                        # --- FITUR AI SCAN ---
+                        # --- FITUR AI SCAN (FIX KAMERA) ---
                         st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
                         c_ai1, c_ai2 = st.columns([2, 3])
                         with c_ai1:
-                            cam_img = st.camera_input("Scan", key=f"cam_{iid}", label_visibility="collapsed")
+                            # Trik refresh kamera dengan key unik
+                            cam_idx = st.session_state.get(f"flip_{iid}", 0)
+                            cam_img = st.camera_input("Scan", key=f"cam_{iid}_{cam_idx}", label_visibility="collapsed")
+                            if st.button("🔄 Putar Kamera", key=f"btn_flip_{iid}"):
+                                st.session_state[f"flip_{iid}"] = cam_idx + 1
+                                st.rerun()
                         with c_ai2:
                             if cam_img:
                                 is_match, conf, d_code = prediksi_barang(cam_img, iid)
                                 if is_match is True: st.success(f"✅ SESUAI ({int(conf*100)}%)")
-                                elif is_match is False: st.error(f"❌ SALAH! (Detected: {d_code})")
-                                else: st.warning(f"⚠️ {d_code}")
-                            else: st.caption("Gunakan kamera belakang (klik ikon switch di kanan atas kamera jika perlu).")
+                                elif is_match is False: st.error(f"❌ SALAH! (Deteksi: {d_code})")
+                            else: st.caption("Gunakan kamera belakang. Jika masih depan, klik tombol putar.")
                         st.markdown('</div>', unsafe_allow_html=True)
 
-                        # --- INPUT MANUAL ---
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[c_kd]} | **Batch:** {row[c_btch]} | **Exp:** {row[c_exp]} | **Qty SO:** {target}")
                         t_ui = ct.checkbox("📝 Note", key=f"t_{iid}", value=vt)
@@ -258,7 +269,6 @@ else:
                         if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui or draft.get(f"t_{iid}") != t_ui:
                             draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui, f"t_{iid}": t_ui})
                             simpan_draft_ke_file(so_aktif, draft); st.rerun()
-                        
                         if q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
                     l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
@@ -268,12 +278,16 @@ else:
                         simpan_rekap_data(l_final); simpan_so_selesai(so_aktif)
                         kirim_telegram(f"✅ *QC SELESAI*\n👤 Checker: {st.session_state['user']}\n📄 No SO: {so_aktif}")
                         st.session_state['page'] = "search"; st.balloons(); st.rerun()
-                    else: st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
+                    else: st.error("Lengkapi semua barang sebelum kirim!")
 
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring QC")
             if os.path.exists("rekap_qc.csv"):
                 rkp = pd.read_csv("rekap_qc.csv")
+                kls = rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
+                kls.columns = ['Nama QC', 'Total SO', 'Total Item', 'Total Qty']
+                st.subheader("🏆 Klasemen Checker")
+                st.table(kls.sort_values(by='Total Item', ascending=False).reset_index(drop=True))
                 st.subheader("📋 Log Pemeriksaan Terakhir")
                 st.dataframe(rkp.tail(20), use_container_width=True)
     else: st.error("❌ File data_so.csv tidak ditemukan.")
