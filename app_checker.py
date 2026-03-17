@@ -19,14 +19,13 @@ st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 @st.cache_resource
 def load_ai_model():
     if os.path.exists("best.pt"):
-        try:
-            return YOLO("best.pt")
+        try: return YOLO("best.pt")
         except: return None
     return None
 
 model_ai = load_ai_model()
 
-# --- INISIALISASI SESSION STATE (FITUR ASLI ANDA) ---
+# --- INISIALISASI SESSION STATE ---
 if 'font_size' not in st.session_state: st.session_state['font_size'] = 16
 if 'auth' not in st.session_state:
     params = st.query_params
@@ -39,7 +38,7 @@ if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS (PERSIS KODE AWAL ANDA) ---
+# --- STYLING CSS (SAMA PERSIS DENGAN KODE AWAL ANDA) ---
 st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
@@ -61,15 +60,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNGSI CORE (AUTOSAVE, LOCK, TELEGRAM) ---
-def update_password_db(u, p):
-    USER_DB[u.lower()] = p
-    with open("users.py", "w") as f: f.write(f"USER_DB = {json.dumps(USER_DB, indent=4)}")
-
-def get_user_photo(u):
-    path = f"photos/{u.lower()}.png"
-    return path if os.path.exists(path) else None
-
+# --- FUNGSI CORE ---
 def simpan_draft_ke_file(so, data):
     if not os.path.exists("drafts"): os.makedirs("drafts")
     with open(f"drafts/draft_{so}.json", "w") as f: json.dump(data, f)
@@ -147,63 +138,41 @@ if not st.session_state['auth']:
     if st.button("Masuk", use_container_width=True):
         if u_in in USER_DB and USER_DB[u_in] == p_in:
             st.session_state['auth'], st.session_state['user'] = True, u_in.capitalize()
-            st.query_params["u"] = u_in; st.rerun()
+            st.rerun()
         else: st.error("Username atau Password salah!")
 else:
     is_admin = st.session_state['user'].lower() == "galang"
     with st.sidebar:
-        photo = get_user_photo(st.session_state['user'])
-        if photo: st.image(photo, width=100)
         st.title(f"👤 {st.session_state['user']}")
-        m_list = ["Pemeriksaan QC", "Dashboard Monitoring", "⚙️ Pengaturan"] if is_admin else ["Pemeriksaan QC", "⚙️ Pengaturan"]
-        menu = st.radio("Menu Utama", m_list)
+        menu = st.radio("Menu Utama", ["Pemeriksaan QC", "Dashboard Monitoring", "⚙️ Pengaturan"])
         if st.sidebar.button("Log Out"):
             if st.session_state['selected_so']: buka_kunci_so(st.session_state['selected_so'])
-            st.session_state['auth'] = False; st.query_params.clear(); st.rerun()
+            st.session_state['auth'] = False; st.rerun()
 
     if os.path.exists("data_so.csv"):
         df_master = pd.read_csv("data_so.csv")
         df_master.columns = df_master.columns.str.strip()
         c_so, c_cust, c_tgl = 'Nomor # Pesanan Penjualan', 'Pelanggan', 'Tanggal Pesanan Penjualan'
         c_qty, c_item, c_kd = 'Kuantitas', 'Nama Barang', 'Kode #'
-        c_btch, c_exp = 'No Seri/Produksi', 'Tgl Kadaluarsa'
         df_master[c_so] = df_master[c_so].astype(str).str.strip()
         df_master[[c_so, c_cust, c_tgl]] = df_master[[c_so, c_cust, c_tgl]].ffill()
         df_master = df_master[df_master[c_item].notna()]
         selesai_list = ambil_daftar_selesai()
 
-        if menu == "⚙️ Pengaturan":
-            st.header("⚙️ Pengaturan Akun")
-            st.session_state['font_size'] = st.slider("Ukuran Font", 12, 24, st.session_state['font_size'])
-            st.subheader("🔑 Ganti Password")
-            p1, p2 = st.text_input("Baru", type="password"), st.text_input("Konfirmasi", type="password")
-            if st.button("Simpan Password"):
-                if p1 == p2 and p1 != "": update_password_db(st.session_state['user'], p1); st.success("Berhasil!")
-                else: st.error("Gagal!")
-
-        elif menu == "Pemeriksaan QC":
+        if menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                # --- DASHBOARD SEARCH (FITUR ASLI ANDA) ---
-                user_photo = get_user_photo(st.session_state['user'])
-                col_p1, col_p2 = st.columns([1, 5])
-                with col_p1:
-                    if user_photo: st.image(user_photo, width=80)
-                    else: st.markdown("<h1 style='margin:0;'>👤</h1>", unsafe_allow_html=True)
-                with col_p2:
-                    st.markdown(f"<div style='padding-top: 10px;'><p style='margin:0; color: gray;'>Selamat Bekerja,</p><h2 style='margin:0;'>{st.session_state['user']}</h2></div>", unsafe_allow_html=True)
-
+                # --- DASHBOARD METRIC AWAL ---
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
                 
                 if is_admin:
                     with st.expander("🛠️ ADMIN TOOLS (Galang Only)"):
-                        s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
+                        s_adm = st.selectbox("Action SO:", l_aktif)
                         if s_adm:
-                            ca, cb, cc = st.columns(3)
+                            ca, cb = st.columns(2)
                             if ca.button("🔓 Unlock"): buka_kunci_so(s_adm); st.rerun()
                             if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
-                            if cc.button("🗑️ Hapus"): simpan_so_selesai(s_adm); st.rerun()
 
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
                 
@@ -214,15 +183,12 @@ else:
                 m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br>{len(selesai_list)}</div>', unsafe_allow_html=True)
                 
                 if so_dipilih:
-                    locks = ambil_semua_lock()
-                    if so_dipilih in locks and locks[so_dipilih] != st.session_state['user']: st.error(f"🚫 Sedang dibuka oleh {locks[so_dipilih]}")
-                    else:
-                        kunci_so(so_dipilih, st.session_state['user'])
-                        st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
-                        st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih); st.rerun()
+                    kunci_so(so_dipilih, st.session_state['user'])
+                    st.session_state['selected_so'], st.session_state['page'] = so_dipilih, "list_barang"
+                    st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih); st.rerun()
 
             elif st.session_state['page'] == "list_barang":
-                # --- TAB CHECKER (FITUR ASLI ANDA) ---
+                # --- RINCIAN SO (TABEL & LIST BARANG ASLI) ---
                 so_aktif = st.session_state['selected_so']
                 if st.button("⬅️ Kembali ke Pencarian"):
                     buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
@@ -230,64 +196,55 @@ else:
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
                 n_apt = df_f.iloc[0][c_cust]
                 st.info(f"📌 **Nomor SO:** {so_aktif} | 🏢 **Apotek:** {n_apt}")
+                
+                # --- TABEL RINCIAN SO (YANG TADI HILANG) ---
+                with st.expander("📊 Lihat Tabel Rincian SO", expanded=True):
+                    st.table(df_f[[c_kd, c_item, c_qty]])
+
                 st.divider()
 
                 v_all, l_final, draft = True, [], st.session_state['qc_drafts'].get(so_aktif, {})
                 for idx, row in df_f.iterrows():
                     iid = str(row[c_kd]).strip(); target = int(float(row[c_qty]))
-                    vq, vn, vt = draft.get(f"q_{iid}", 0), draft.get(f"n_{iid}", ""), draft.get(f"t_{iid}", False)
+                    vq, vn = draft.get(f"q_{iid}", 0), draft.get(f"n_{iid}", "")
                     s_clp = "status-ok" if int(vq) == target else ("status-err" if int(vq) > 0 else "status-pending")
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}", expanded=False):
-                        # --- FITUR AI SCAN (FIX KAMERA) ---
+                        # --- SOLUSI KAMERA TERAKHIR ---
                         st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
-                        c_ai1, c_ai2 = st.columns([2, 3])
-                        with c_ai1:
-                            # Trik refresh kamera dengan key unik
-                            cam_idx = st.session_state.get(f"flip_{iid}", 0)
-                            cam_img = st.camera_input("Scan", key=f"cam_{iid}_{cam_idx}", label_visibility="collapsed")
-                            if st.button("🔄 Putar Kamera", key=f"btn_flip_{iid}"):
-                                st.session_state[f"flip_{iid}"] = cam_idx + 1
-                                st.rerun()
-                        with c_ai2:
-                            if cam_img:
-                                is_match, conf, d_code = prediksi_barang(cam_img, iid)
-                                if is_match is True: st.success(f"✅ SESUAI ({int(conf*100)}%)")
-                                elif is_match is False: st.error(f"❌ SALAH! (Deteksi: {d_code})")
-                            else: st.caption("Gunakan kamera belakang. Jika masih depan, klik tombol putar.")
+                        # Gunakan file_uploader: Di HP Checker akan otomatis diminta "Kamera"
+                        cam_img = st.file_uploader(f"Scan Barang {iid}", key=f"cam_{iid}", label_visibility="collapsed")
+                        if cam_img:
+                            match, conf, d_code = prediksi_barang(cam_img, iid)
+                            if match is True: st.success(f"✅ SESUAI ({int(conf*100)}%)")
+                            elif match is False: st.error(f"❌ SALAH! (Detected: {d_code})")
                         st.markdown('</div>', unsafe_allow_html=True)
 
                         ci, ct = st.columns([4.5, 1])
-                        ci.write(f"**Code:** {row[c_kd]} | **Batch:** {row[c_btch]} | **Exp:** {row[c_exp]} | **Qty SO:** {target}")
-                        t_ui = ct.checkbox("📝 Note", key=f"t_{iid}", value=vt)
-                        u_in = st.text_input("Input Fisik", key=f"q_{iid}", value="" if vq==0 else str(vq), placeholder="0", label_visibility="collapsed")
+                        ci.write(f"**Code:** {row[c_kd]} | **Qty SO:** {target}")
+                        u_in = st.text_input("Input Fisik", key=f"q_{iid}", value="" if vq==0 else str(vq), placeholder="0")
+                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn, placeholder="Tambahkan catatan jika perlu")
                         
                         q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
-                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn).strip() if t_ui else ""
-                        
-                        if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui or draft.get(f"t_{iid}") != t_ui:
-                            draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui, f"t_{iid}": t_ui})
+                        if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui:
+                            draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui})
                             simpan_draft_ke_file(so_aktif, draft); st.rerun()
                         if q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
-                    l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
+                    l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Item": row[c_item], "Qty_Fisik": q_num, "Note": n_ui})
 
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
                         simpan_rekap_data(l_final); simpan_so_selesai(so_aktif)
-                        kirim_telegram(f"✅ *QC SELESAI*\n👤 Checker: {st.session_state['user']}\n📄 No SO: {so_aktif}")
+                        kirim_telegram(f"✅ QC SELESAI: {so_aktif} oleh {st.session_state['user']}")
                         st.session_state['page'] = "search"; st.balloons(); st.rerun()
-                    else: st.error("Lengkapi semua barang sebelum kirim!")
+                    else: st.error("Lengkapi jumlah barang sesuai SO!")
 
         elif menu == "Dashboard Monitoring":
             st.title("📊 Monitoring QC")
             if os.path.exists("rekap_qc.csv"):
                 rkp = pd.read_csv("rekap_qc.csv")
-                kls = rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
-                kls.columns = ['Nama QC', 'Total SO', 'Total Item', 'Total Qty']
-                st.subheader("🏆 Klasemen Checker")
-                st.table(kls.sort_values(by='Total Item', ascending=False).reset_index(drop=True))
                 st.subheader("📋 Log Pemeriksaan Terakhir")
                 st.dataframe(rkp.tail(20), use_container_width=True)
     else: st.error("❌ File data_so.csv tidak ditemukan.")
