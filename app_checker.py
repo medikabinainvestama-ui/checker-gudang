@@ -8,12 +8,10 @@ from datetime import datetime
 from users import USER_DB
 from ultralytics import YOLO 
 from PIL import Image, ImageOps
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 # --- KONFIGURASI ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
-RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
@@ -47,17 +45,11 @@ st.markdown(f"""
     html, body, [data-testid="stWidgetLabel"] p, .stMarkdown p, .stSelectbox label, label {{
         font-size: {st.session_state['font_size']}px !important;
     }}
-    table, thead, tbody, th, td {{ text-align: center !important; vertical-align: middle !important; }}
-    .block-container {{ padding-top: 2rem !important; padding-bottom: 0rem !important; }}
     div[data-testid="stExpander"] {{ border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }}
-    .metric-card {{
-        background-color: #f0f2f6; padding: 15px; border-radius: 10px;
-        text-align: center; border: 1px solid #e0e0e0; margin: 10px 0;
-    }}
-    .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
-    .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
-    .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
-    .ai-box {{ padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px dashed #333; background-color: #f9f9f9; }}
+    .ai-box {{ padding: 15px; border-radius: 8px; border: 2px dashed #007bff; background-color: #f8f9fa; margin-bottom: 15px; }}
+    .status-ok {{ background-color: #d4edda !important; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
+    .status-err {{ background-color: #f8d7da !important; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
+    .status-pending {{ background-color: #ffffff !important; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -130,9 +122,11 @@ def kirim_telegram(m):
         pass
 
 # --- FUNGSI PREDIKSI AI ---
-def prediksi_barang(img, kode_target):
+def prediksi_barang(img_buffer, kode_target):
     if model_ai is None:
         return None, 0, "Model AI (best.pt) tidak ditemukan"
+    img = Image.open(img_buffer)
+    img = ImageOps.exif_transpose(img) # Memperbaiki rotasi foto HP
     results = model_ai.predict(img)
     top_result = results[0].probs
     class_index = top_result.top1
@@ -183,51 +177,15 @@ else:
                 if not os.path.exists("photos"): os.makedirs("photos")
                 with open(f"photos/{st.session_state['user'].lower()}.png", "wb") as f: f.write(up_f.getbuffer())
                 st.success("Foto Berhasil!"); st.rerun()
-            st.subheader("🔑 Ganti Password")
-            p1, p2 = st.text_input("Baru", type="password"), st.text_input("Konfirmasi", type="password")
-            if st.button("Simpan Password"):
-                if p1 == p2 and p1 != "": update_password_db(st.session_state['user'], p1); st.success("Berhasil!")
-                else: st.error("Gagal!")
 
         elif menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                user_photo = get_user_photo(st.session_state['user'])
-                col_p1, col_p2 = st.columns([1, 5])
-                with col_p1:
-                    if user_photo: st.image(user_photo, width=80)
-                    else: st.markdown("<h1 style='margin:0;'>👤</h1>", unsafe_allow_html=True)
-                with col_p2:
-                    st.markdown(f"<div style='padding-top: 10px;'><p style='margin:0; color: gray;'>Selamat Bekerja,</p><h2 style='margin:0;'>{st.session_state['user']}</h2></div>", unsafe_allow_html=True)
-
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
                 st.subheader("🎯 Cari Nomor SO")
-                if is_admin:
-                    with st.expander("🛠️ ADMIN TOOLS (Galang Only)", expanded=False):
-                        s_adm = st.selectbox("Action SO:", l_aktif, key="adm_s")
-                        if s_adm:
-                            ca, cb, cc, cd = st.columns(4)
-                            if ca.button("🔓 Unlock"): buka_kunci_so(s_adm); st.rerun()
-                            if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
-                            if cc.button("🗑️ Hapus"): simpan_so_selesai(s_adm); st.rerun()
-                            if cd.button("⚡ Quick Done"): 
-                                simpan_so_selesai(s_adm)
-                                kirim_telegram(f"⚡ QUICK DONE BY ADMIN: {s_adm}")
-                                st.rerun()
-                
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
-                st.divider()
-                m1, m2, m3 = st.columns(3)
-                m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br><span style="font-size:24px">{len(l_all)}</span></div>', unsafe_allow_html=True)
-                m2.markdown(f'<div class="metric-card">⏳ <b>Belum QC</b><br><span style="font-size:24px">{len(list(l_aktif))}</span></div>', unsafe_allow_html=True)
-                m3.markdown(f'<div class="metric-card">✅ <b>Selesai</b><br><span style="font-size:24px">{len(selesai_list)}</span></div>', unsafe_allow_html=True)
-                
-                locks = ambil_semua_lock()
-                if locks:
-                    with st.expander("👥 Petugas Aktif Saat Ini", expanded=True):
-                        for s, p in locks.items(): st.caption(f"🔵 **{p}** sedang mengerjakan **{s}**")
-                
                 if so_dipilih:
+                    locks = ambil_semua_lock()
                     if so_dipilih in locks and locks[so_dipilih] != st.session_state['user']: st.error(f"🚫 Sedang dibuka oleh {locks[so_dipilih]}")
                     else:
                         kunci_so(so_dipilih, st.session_state['user'])
@@ -236,115 +194,51 @@ else:
 
             elif st.session_state['page'] == "list_barang":
                 so_aktif = st.session_state['selected_so']
-                if st.button("⬅️ Kembali ke Pencarian"):
+                if st.button("⬅️ Kembali"):
                     buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
                 
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
-                n_apt, t_so = df_f.iloc[0][c_cust], df_f.iloc[0][c_tgl]
-                df_f[c_qty] = pd.to_numeric(df_f[c_qty], errors='coerce').fillna(0)
-                
-                st.info(f"📌 **Nomor SO:** {so_aktif}")
-                h1, h2 = st.columns(2)
-                h1.markdown(f"🏢 **Apotek:** {n_apt}\n\n📅 **Tanggal SO:** {t_so}")
-                h2.markdown(f"💊 **Total Jenis:** {len(df_f)} Item\n\n🔢 **Total Qty SO:** {int(df_f[c_qty].sum())} Pcs")
-                st.divider()
+                st.info(f"📄 **SO:** {so_aktif} | 🏢 **Apotek:** {df_f.iloc[0][c_cust]}")
 
                 v_all, l_final, draft = True, [], st.session_state['qc_drafts'].get(so_aktif, {})
                 for idx, row in df_f.iterrows():
                     iid = str(row[c_kd]).strip(); target = int(float(row[c_qty]))
                     vq, vn, vt = draft.get(f"q_{iid}", 0), draft.get(f"n_{iid}", ""), draft.get(f"t_{iid}", False)
-                    s_clp, icon = "status-pending", " ⏳"
-                    if str(vq) != "0":
-                        if int(vq) == target: s_clp, icon = "status-ok", " ✅"
-                        else: s_clp, icon = "status-err", " ⚠️"
+                    s_clp = "status-ok" if int(vq) == target else ("status-err" if int(vq) > 0 else "status-pending")
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
-                    with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
-                        # --- AI SCAN MENGGUNAKAN STREAMLIT-WEBRTC (FORCE REAR CAMERA) ---
-                        with st.container():
-                            st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
-                            
-                            # Komponen WebRTC untuk akses kamera belakang secara paksa
-                            ctx = webrtc_streamer(
-                                key=f"webrtc_{iid}",
-                                mode=WebRtcMode.SENDRECV,
-                                rtc_configuration=RTC_CONFIGURATION,
-                                video_html_attrs={
-                                    "style": {"width": "100%"},
-                                    "controls": False,
-                                    "autoPlay": True,
-                                },
-                                media_stream_constraints={
-                                    "video": {"facingMode": "environment"}, # KUNCI KAMERA BELAKANG
-                                    "audio": False
-                                },
-                            )
+                    with st.expander(f"💊 {row[c_item]}", expanded=False):
+                        # --- MODUL AI SCAN PALING STABIL ---
+                        st.markdown('<div class="ai-box">', unsafe_allow_html=True)
+                        st.write("🤖 **AI Visual Verification**")
+                        # camera_input standar lebih ramah memori server
+                        img_file = st.camera_input("Ambil Foto Barang", key=f"cam_{iid}")
+                        
+                        if img_file:
+                            match, conf, d_code = prediksi_barang(img_file, iid)
+                            if match: st.success(f"✅ SESUAI ({int(conf*100)}%)")
+                            else: st.error(f"❌ SALAH BARANG! (Terdeteksi: {d_code})")
+                        st.markdown('</div>', unsafe_allow_html=True)
 
-                            if ctx.video_receiver:
-                                try:
-                                    video_frame = ctx.video_receiver.get_frame()
-                                    if video_frame:
-                                        img_ai = video_frame.to_image()
-                                        if st.button(f"📸 Cek Barang (AI Scan)", key=f"scan_btn_{iid}"):
-                                            is_match, conf, d_code = prediksi_barang(img_ai, iid)
-                                            if is_match:
-                                                st.success(f"✅ SESUAI ({int(conf*100)}%)")
-                                            else:
-                                                st.error(f"❌ SALAH! (Detected: {d_code})")
-                                except:
-                                    st.caption("Menunggu sinyal kamera...")
-                            else:
-                                st.caption("Klik 'Start' di jendela video di atas untuk mulai scan.")
-                            
-                            st.markdown('</div>', unsafe_allow_html=True)
-
-                        ci, ct = st.columns([4.5, 1])
-                        ci.write(f"**Code:** {row[c_kd]} | **Batch:** {row[c_btch]} | **Exp:** {row[c_exp]} | **Qty:** {target}")
-                        t_ui = ct.checkbox("📝 Note", key=f"t_{so_aktif}_{iid}", value=vt)
-                        u_in = st.text_input("Input Fisik", key=f"q_{so_aktif}_{iid}", value="" if vq==0 else str(vq), placeholder="0", label_visibility="collapsed")
+                        ci, ct = st.columns([4, 1])
+                        ci.write(f"**Code:** {iid} | **Qty SO:** {target}")
+                        t_ui = ct.checkbox("📝 Note", key=f"t_{iid}", value=vt)
+                        u_in = st.text_input("Input Fisik", key=f"q_{iid}", value="" if vq==0 else str(vq), placeholder="0")
                         
                         q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
-                        n_ui = st.text_input("Catatan:", key=f"n_{so_aktif}_{iid}", value=vn).strip() if t_ui else ""
+                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn) if t_ui else ""
                         
-                        if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui or draft.get(f"t_{iid}") != t_ui:
+                        if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui:
                             draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui, f"t_{iid}": t_ui})
                             simpan_draft_ke_file(so_aktif, draft); st.rerun()
-                        
-                        if u_in == "" or q_num != target: v_all = False
+                        if q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
-                    l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Apotek": n_apt, "Kode": iid, "Item": row[c_item], "Qty_SO": target, "Qty_Fisik": q_num, "Note": n_ui})
+                    l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Qty_Fisik": q_num, "Note": n_ui})
 
-                if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
+                if st.button("✅ SELESAI & KIRIM", use_container_width=True, type="primary"):
                     if v_all:
-                        simpan_rekap_data(l_final)
-                        simpan_so_selesai(so_aktif)
-                        nt = ""
-                        for d in l_final:
-                            if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
-                        kirim_telegram(f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {n_apt}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
-                        st.session_state['selected_so'] = None
-                        st.session_state['page'] = "search"
-                        st.balloons(); st.rerun()
-                    else: 
-                        st.error("Lengkapi semua barang (Warna Hijau) sebelum kirim!")
-
-        elif menu == "Dashboard Monitoring":
-            st.title("📊 Monitoring QC")
-            if os.path.exists("rekap_qc.csv"):
-                rkp = pd.read_csv("rekap_qc.csv")
-                kls = rkp.groupby('Petugas').agg({'SO': 'nunique', 'Item': 'count', 'Qty_Fisik': 'sum'}).reset_index()
-                kls.columns = ['Nama QC', 'Total SO', 'Total Item', 'Total Qty']
-                st.subheader("🏆 Klasemen Checker")
-                st.table(kls.sort_values(by='Total Item', ascending=False).reset_index(drop=True))
-            mon = df_master.groupby([c_so, c_tgl]).agg({c_item: 'count', c_qty: 'sum'}).reset_index()
-            mon.columns = ['No SO', 'Tanggal SO', 'Total Jenis Barang', 'Total Qty SO']
-            def ck_st(r):
-                if r['No SO'] in selesai_list:
-                    try: return "Done", rkp[rkp['SO'] == r['No SO']]['Petugas'].iloc[0]
-                    except: return "Done", "-"
-                return "Pending", "-"
-            mon[['Status', 'Nama QC']] = mon.apply(lambda x: pd.Series(ck_st(x)), axis=1)
-            st.subheader("📋 Status Semua No SO")
-            st.dataframe(mon, use_container_width=True, hide_index=True)
-    else: st.error("❌ File data_so.csv tidak ditemukan.")
-    
+                        simpan_rekap_data(l_final); simpan_so_selesai(so_aktif)
+                        kirim_telegram(f"✅ QC SELESAI: {so_aktif} oleh {st.session_state['user']}")
+                        st.session_state['page'] = "search"; st.balloons(); st.rerun()
+                    else: st.error("Cek kembali jumlah barang!")
+    else: st.error("data_so.csv tidak ditemukan.")
