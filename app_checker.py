@@ -9,7 +9,7 @@ from users import USER_DB
 from ultralytics import YOLO 
 from PIL import Image, ImageOps
 
-# --- KONFIGURASI ---
+# --- KONFIGURASI TELEGRAM ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
@@ -45,11 +45,12 @@ st.markdown(f"""
     html, body, [data-testid="stWidgetLabel"] p, .stMarkdown p, .stSelectbox label, label {{
         font-size: {st.session_state['font_size']}px !important;
     }}
-    div[data-testid="stExpander"] {{ border: 1px solid #ddd; border-radius: 8px; margin-bottom: -15px !important; }}
-    .ai-box {{ padding: 15px; border-radius: 8px; border: 2px dashed #007bff; background-color: #f8f9fa; margin-bottom: 15px; }}
-    .status-ok {{ background-color: #d4edda !important; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
-    .status-err {{ background-color: #f8d7da !important; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
-    .status-pending {{ background-color: #ffffff !important; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
+    .block-container {{ padding-top: 2rem !important; padding-bottom: 0rem !important; }}
+    div[data-testid="stExpander"] {{ border: 1px solid #ddd; border-radius: 8px; margin-bottom: -10px !important; }}
+    .ai-box {{ padding: 10px; border-radius: 5px; border: 1px dashed #333; background-color: #f9f9f9; margin-bottom: 10px; }}
+    .status-ok {{ background-color: #d4edda !important; border-left: 10px solid #28a745; }}
+    .status-err {{ background-color: #f8d7da !important; border-left: 10px solid #dc3545; }}
+    .status-pending {{ background-color: #ffffff !important; border-left: 10px solid #6c757d; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -126,7 +127,7 @@ def prediksi_barang(img_buffer, kode_target):
     if model_ai is None:
         return None, 0, "Model AI (best.pt) tidak ditemukan"
     img = Image.open(img_buffer)
-    img = ImageOps.exif_transpose(img) # Memperbaiki rotasi foto HP
+    img = ImageOps.exif_transpose(img)
     results = model_ai.predict(img)
     top_result = results[0].probs
     class_index = top_result.top1
@@ -151,7 +152,7 @@ else:
         photo = get_user_photo(st.session_state['user'])
         if photo: st.image(photo, width=100)
         st.title(f"👤 {st.session_state['user']}")
-        m_list = ["Pemeriksaan QC", "Dashboard Monitoring", "⚙️ Pengaturan"] if is_admin else ["Pemeriksaan QC", "⚙️ Pengaturan"]
+        m_list = ["Pemeriksaan QC", "⚙️ Pengaturan"]
         menu = st.radio("Menu Utama", m_list)
         if st.sidebar.button("Log Out"):
             if st.session_state['selected_so']: buka_kunci_so(st.session_state['selected_so'])
@@ -162,23 +163,12 @@ else:
         df_master.columns = df_master.columns.str.strip()
         c_so, c_cust, c_tgl = 'Nomor # Pesanan Penjualan', 'Pelanggan', 'Tanggal Pesanan Penjualan'
         c_qty, c_item, c_kd = 'Kuantitas', 'Nama Barang', 'Kode #'
-        c_btch, c_exp = 'No Seri/Produksi', 'Tgl Kadaluarsa'
         df_master[c_so] = df_master[c_so].astype(str).str.strip()
         df_master[[c_so, c_cust, c_tgl]] = df_master[[c_so, c_cust, c_tgl]].ffill()
         df_master = df_master[df_master[c_item].notna()]
         selesai_list = ambil_daftar_selesai()
 
-        if menu == "⚙️ Pengaturan":
-            st.header("⚙️ Pengaturan Akun")
-            st.session_state['font_size'] = st.slider("Ukuran Font", 12, 24, st.session_state['font_size'])
-            st.subheader("🖼️ Update Foto Profil")
-            up_f = st.file_uploader("Upload Foto", type=['png', 'jpg'])
-            if up_f:
-                if not os.path.exists("photos"): os.makedirs("photos")
-                with open(f"photos/{st.session_state['user'].lower()}.png", "wb") as f: f.write(up_f.getbuffer())
-                st.success("Foto Berhasil!"); st.rerun()
-
-        elif menu == "Pemeriksaan QC":
+        if menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
                 l_all = df_master[c_so].unique()
                 l_aktif = sorted([s for s in l_all if s not in selesai_list])
@@ -208,29 +198,22 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}", expanded=False):
-                        # --- MODUL AI SCAN PALING STABIL ---
                         st.markdown('<div class="ai-box">', unsafe_allow_html=True)
-                        st.write("🤖 **AI Visual Verification**")
-                        # camera_input standar lebih ramah memori server
-                        img_file = st.camera_input("Ambil Foto Barang", key=f"cam_{iid}")
-                        
+                        st.write("🤖 **AI Visual Scan**")
+                        # camera_input untuk capture gambar
+                        img_file = st.camera_input("Ambil Foto", key=f"cam_{iid}")
                         if img_file:
                             match, conf, d_code = prediksi_barang(img_file, iid)
                             if match: st.success(f"✅ SESUAI ({int(conf*100)}%)")
-                            else: st.error(f"❌ SALAH BARANG! (Terdeteksi: {d_code})")
+                            else: st.error(f"❌ SALAH BARANG! (Detected: {d_code})")
                         st.markdown('</div>', unsafe_allow_html=True)
 
-                        ci, ct = st.columns([4, 1])
-                        ci.write(f"**Code:** {iid} | **Qty SO:** {target}")
-                        t_ui = ct.checkbox("📝 Note", key=f"t_{iid}", value=vt)
                         u_in = st.text_input("Input Fisik", key=f"q_{iid}", value="" if vq==0 else str(vq), placeholder="0")
-                        
                         q_num = int(re.sub("[^0-9]", "", u_in)) if re.sub("[^0-9]", "", u_in) != "" else 0
-                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn) if t_ui else ""
+                        n_ui = st.text_input("Catatan:", key=f"n_{iid}", value=vn)
                         
                         if draft.get(f"q_{iid}") != q_num or draft.get(f"n_{iid}") != n_ui:
-                            draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui, f"t_{iid}": t_ui})
-                            simpan_draft_ke_file(so_aktif, draft); st.rerun()
+                            draft.update({f"q_{iid}": q_num, f"n_{iid}": n_ui}); simpan_draft_ke_file(so_aktif, draft); st.rerun()
                         if q_num != target: v_all = False
                     st.markdown('</div>', unsafe_allow_html=True)
                     l_final.append({"Petugas": st.session_state['user'], "SO": so_aktif, "Kode": iid, "Qty_Fisik": q_num, "Note": n_ui})
@@ -241,4 +224,3 @@ else:
                         kirim_telegram(f"✅ QC SELESAI: {so_aktif} oleh {st.session_state['user']}")
                         st.session_state['page'] = "search"; st.balloons(); st.rerun()
                     else: st.error("Cek kembali jumlah barang!")
-    else: st.error("data_so.csv tidak ditemukan.")
