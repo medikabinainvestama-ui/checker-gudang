@@ -1,6 +1,4 @@
 streamlit
 pandas
-requests
-ultralytics-slim
-Pillow
 openpyxl
+ultralytics==8.0.0
