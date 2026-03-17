@@ -8,10 +8,12 @@ from datetime import datetime
 from users import USER_DB
 from ultralytics import YOLO 
 from PIL import Image, ImageOps
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
-# --- KONFIGURASI TELEGRAM ---
+# --- KONFIGURASI ---
 TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
+RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
 
@@ -128,11 +130,9 @@ def kirim_telegram(m):
         pass
 
 # --- FUNGSI PREDIKSI AI ---
-def prediksi_barang(img_buffer, kode_target):
+def prediksi_barang(img, kode_target):
     if model_ai is None:
         return None, 0, "Model AI (best.pt) tidak ditemukan"
-    img = Image.open(img_buffer)
-    img = ImageOps.exif_transpose(img)
     results = model_ai.predict(img)
     top_result = results[0].probs
     class_index = top_result.top1
@@ -260,39 +260,42 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
-                        # --- PERBAIKAN FITUR AI SCAN (KUNCI KAMERA BELAKANG) ---
+                        # --- AI SCAN MENGGUNAKAN STREAMLIT-WEBRTC (FORCE REAR CAMERA) ---
                         with st.container():
                             st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
                             
-                            # Jika kamera stuck atau mau ganti kamera, refresh key
-                            if st.button("🔄 Gunakan Kamera Belakang (Utama)", key=f"btn_cam_{iid}"):
-                                st.session_state[f"cam_key_{iid}"] = datetime.now().strftime("%H%M%S")
-                                st.rerun()
+                            # Komponen WebRTC untuk akses kamera belakang secara paksa
+                            ctx = webrtc_streamer(
+                                key=f"webrtc_{iid}",
+                                mode=WebRtcMode.SENDRECV,
+                                rtc_configuration=RTC_CONFIGURATION,
+                                video_html_attrs={
+                                    "style": {"width": "100%"},
+                                    "controls": False,
+                                    "autoPlay": True,
+                                },
+                                media_stream_constraints={
+                                    "video": {"facingMode": "environment"}, # KUNCI KAMERA BELAKANG
+                                    "audio": False
+                                },
+                            )
 
-                            # Default key agar stabil
-                            if f"cam_key_{iid}" not in st.session_state:
-                                st.session_state[f"cam_key_{iid}"] = "init"
-
-                            c_ai1, c_ai2 = st.columns([2, 3])
-                            with c_ai1:
-                                # Menggunakan key dinamis untuk memicu ulang inisialisasi browser
-                                # Parameter label sengaja dibedakan per barang agar tidak bentrok
-                                cam_img = st.camera_input(
-                                    f"Scan {row[c_item]}", 
-                                    key=f"cam_input_{st.session_state[f'cam_key_{iid}']}_{iid}",
-                                    label_visibility="collapsed"
-                                )
-                            with c_ai2:
-                                if cam_img:
-                                    is_match, conf, d_code = prediksi_barang(cam_img, iid)
-                                    if is_match is True:
-                                        st.success(f"✅ SESUAI ({int(conf*100)}%)")
-                                    elif is_match is False:
-                                        st.error(f"❌ SALAH! (Detected: {d_code})")
-                                    else:
-                                        st.warning(f"⚠️ {d_code}")
-                                else:
-                                    st.caption("Gunakan Kamera Utama (Belakang) untuk akurasi.")
+                            if ctx.video_receiver:
+                                try:
+                                    video_frame = ctx.video_receiver.get_frame()
+                                    if video_frame:
+                                        img_ai = video_frame.to_image()
+                                        if st.button(f"📸 Cek Barang (AI Scan)", key=f"scan_btn_{iid}"):
+                                            is_match, conf, d_code = prediksi_barang(img_ai, iid)
+                                            if is_match:
+                                                st.success(f"✅ SESUAI ({int(conf*100)}%)")
+                                            else:
+                                                st.error(f"❌ SALAH! (Detected: {d_code})")
+                                except:
+                                    st.caption("Menunggu sinyal kamera...")
+                            else:
+                                st.caption("Klik 'Start' di jendela video di atas untuk mulai scan.")
+                            
                             st.markdown('</div>', unsafe_allow_html=True)
 
                         ci, ct = st.columns([4.5, 1])
