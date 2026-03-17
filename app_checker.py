@@ -1,3 +1,5 @@
+import os
+os.environ["QT_X11_NO_MITSHM"] = "1"
 import streamlit as st
 import pandas as pd
 import requests
