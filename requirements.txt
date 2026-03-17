@@ -4,4 +4,5 @@ requests
 ultralytics
 Pillow
 openpyxl
-opencv-python-headless
+streamlit-webrtc
+av
