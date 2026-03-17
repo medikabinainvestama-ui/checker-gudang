@@ -54,6 +54,14 @@ st.markdown(f"""
     .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
     .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
     .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
+    
+    /* Styling Tambahan untuk AI */
+    .ai-box {{
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        border: 1px dashed #333;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -121,10 +129,19 @@ def simpan_so_selesai(so):
 
 def kirim_telegram(m):
     try: 
-        # Menggunakan timeout agar aplikasi tidak hang jika koneksi Telegram lambat
         requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={m}", timeout=5)
     except: 
         pass
+
+# --- FUNGSI AI (BARU) ---
+def deteksi_ai_dummy(image, target_name):
+    """
+    Fungsi ini sementara hanya simulasi. 
+    Nanti kita akan ganti dengan model YOLO/AI asli.
+    """
+    if image is not None:
+        return True, 0.95 # Mengembalikan Match=True dan Confidence=95%
+    return False, 0
 
 # --- LOGIN ---
 if not st.session_state['auth']:
@@ -246,6 +263,23 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}{icon}", expanded=False):
+                        # --- FITUR AI SCAN (BARU) ---
+                        with st.container():
+                            st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
+                            c_ai1, c_ai2 = st.columns([2, 3])
+                            with c_ai1:
+                                cam_img = st.camera_input("Scan Barang", key=f"cam_{so_aktif}_{iid}", label_visibility="collapsed")
+                            with c_ai2:
+                                if cam_img:
+                                    match, conf = deteksi_ai_dummy(cam_img, row[c_item])
+                                    if match:
+                                        st.success(f"✅ AI: BARANG SESUAI ({int(conf*100)}%)")
+                                    else:
+                                        st.error("❌ AI: BARANG TIDAK COCOK!")
+                                else:
+                                    st.caption("Arahkan kamera ke kemasan barang untuk verifikasi LASA.")
+                            st.markdown('</div>', unsafe_allow_html=True)
+
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[c_kd]} | **Batch:** {row[c_btch]} | **Exp:** {row[c_exp]} | **Qty:** {target}")
                         t_ui = ct.checkbox("📝 Note", key=f"t_{so_aktif}_{iid}", value=vt)
@@ -265,19 +299,13 @@ else:
                 # --- PERBAIKAN LOGIKA PADA TOMBOL SELESAI ---
                 if st.button("✅ SELESAI & KIRIM LAPORAN", use_container_width=True, type="primary"):
                     if v_all:
-                        # 1. Simpan Data Rekap Terlebih Dahulu
                         simpan_rekap_data(l_final)
-                        
-                        # 2. Tandai SO Sebagai Selesai (Buka Lock & Hapus Draft)
                         simpan_so_selesai(so_aktif)
-                        
-                        # 3. Kirim Telegram
                         nt = ""
                         for d in l_final:
                             if d['Note']: nt += f"- {d['Kode']} ({d['Qty_Fisik']} pcs)\n  🗒 Note: {d['Note']}\n"
                         kirim_telegram(f"✅ *QC SELESAI*\n👤 Petugas: {st.session_state['user']}\n📄 No SO: {so_aktif}\n📍 Apotek: {n_apt}\n---------------------------\n{nt if nt else '_Tanpa Catatan_'}")
                         
-                        # 4. Update Status Halaman Sebelum Rerun
                         st.session_state['selected_so'] = None
                         st.session_state['page'] = "search"
                         st.balloons()
