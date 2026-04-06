@@ -6,7 +6,6 @@ import re
 import json
 from datetime import datetime
 from users import USER_DB
-from ultralytics import YOLO 
 from PIL import Image, ImageOps
 
 # --- KONFIGURASI TELEGRAM ---
@@ -14,18 +13,6 @@ TOKEN = "8765480491:AAGI8Q8qi5ruWWdHZBSrNdq1j-NkUWa9YJc"
 CHAT_ID = "-1003811491120"
 
 st.set_page_config(page_title="QC MBI - Checker Center", layout="wide")
-
-# --- LOAD MODEL AI ---
-@st.cache_resource
-def load_ai_model():
-    if os.path.exists("best.pt"):
-        try:
-            return YOLO("best.pt")
-        except:
-            return None
-    return None
-
-model_ai = load_ai_model()
 
 # --- INISIALISASI SESSION STATE ---
 if 'font_size' not in st.session_state: st.session_state['font_size'] = 16
@@ -40,7 +27,7 @@ if 'page' not in st.session_state: st.session_state['page'] = "search"
 if 'selected_so' not in st.session_state: st.session_state['selected_so'] = None
 if 'qc_drafts' not in st.session_state: st.session_state['qc_drafts'] = {}
 
-# --- STYLING CSS (KEMBALI KE ASLI) ---
+# --- STYLING CSS ---
 st.markdown(f"""
     <style>
     footer {{visibility: hidden !important;}}
@@ -58,7 +45,6 @@ st.markdown(f"""
     .status-ok {{ background-color: #d4edda !important; border-radius: 8px; border-left: 10px solid #28a745; margin-bottom: -15px !important; }}
     .status-err {{ background-color: #f8d7da !important; border-radius: 8px; border-left: 10px solid #dc3545; margin-bottom: -15px !important; }}
     .status-pending {{ background-color: #ffffff !important; border-radius: 8px; border-left: 10px solid #6c757d; margin-bottom: -15px !important; }}
-    .ai-box {{ padding: 10px; border-radius: 5px; margin-bottom: 10px; border: 1px dashed #333; background-color: #f9f9f9; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -128,18 +114,6 @@ def kirim_telegram(m):
     try: requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={m}", timeout=5)
     except: pass
 
-def prediksi_barang(img_buffer, kode_target):
-    if model_ai is None: return None, 0, "Model AI tidak ditemukan"
-    img = Image.open(img_buffer)
-    img = ImageOps.exif_transpose(img)
-    results = model_ai.predict(img)
-    top_result = results[0].probs
-    class_index = top_result.top1
-    confidence = top_result.top1conf.item()
-    detected_code = results[0].names[class_index]
-    match = str(detected_code) == str(kode_target)
-    return match, confidence, detected_code
-
 # --- HALAMAN LOGIN ---
 if not st.session_state['auth']:
     st.title("🔐 Login Checker MBI")
@@ -184,7 +158,6 @@ else:
 
         elif menu == "Pemeriksaan QC":
             if st.session_state['page'] == "search":
-                # --- DASHBOARD SEARCH ASLI ---
                 user_photo = get_user_photo(st.session_state['user'])
                 col_p1, col_p2 = st.columns([1, 5])
                 with col_p1:
@@ -206,7 +179,6 @@ else:
                             if cb.button("♻️ Reset"): hapus_file_draft(s_adm); st.rerun()
 
                 so_dipilih = st.selectbox("Pilih No SO:", l_aktif, index=None, placeholder="Ketik nomor SO...")
-                
                 st.divider()
                 m1, m2, m3 = st.columns(3)
                 m1.markdown(f'<div class="metric-card">📦 <b>Total SO</b><br>{len(l_all)}</div>', unsafe_allow_html=True)
@@ -222,14 +194,11 @@ else:
                         st.session_state['qc_drafts'][so_dipilih] = muat_draft_dari_file(so_dipilih); st.rerun()
 
             elif st.session_state['page'] == "list_barang":
-                # --- TAB CHECKER (RINCIAN SO) ---
                 so_aktif = st.session_state['selected_so']
                 if st.button("⬅️ Kembali ke Pencarian"):
                     buka_kunci_so(so_aktif); st.session_state['selected_so'], st.session_state['page'] = None, "search"; st.rerun()
                 
                 df_f = df_master[df_master[c_so] == so_aktif].copy()
-                
-                # --- RINCIAN SO (DARI USER) ---
                 nama_apotek = df_f.iloc[0][c_cust]
                 tgl_so = df_f.iloc[0][c_tgl]
                 jml_jenis = len(df_f)
@@ -253,16 +222,6 @@ else:
                     
                     st.markdown(f'<div class="{s_clp}">', unsafe_allow_html=True)
                     with st.expander(f"💊 {row[c_item]}", expanded=False):
-                        # --- MODUL AI SCAN (VIA CAMERA HP) ---
-                        st.markdown('<div class="ai-box"><b>🤖 AI Visual Checker</b>', unsafe_allow_html=True)
-                        cam_img = st.file_uploader(f"Scan Barang {iid}", key=f"cam_{iid}", label_visibility="collapsed")
-                        if cam_img:
-                            match, conf, d_code = prediksi_barang(cam_img, iid)
-                            if match is True: st.success(f"✅ SESUAI ({int(conf*100)}%)")
-                            elif match is False: st.error(f"❌ SALAH! (Detected: {d_code})")
-                        st.markdown('</div>', unsafe_allow_html=True)
-
-                        # --- LAYOUT INPUT KODE AWAL ---
                         ci, ct = st.columns([4.5, 1])
                         ci.write(f"**Code:** {row[c_kd]} | **Batch:** {row[c_btch]} | **Exp:** {row[c_exp]} | **Qty SO:** {target}")
                         t_ui = ct.checkbox("📝 Note", key=f"t_{iid}", value=vt)
